@@ -25,7 +25,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'OAuth not configured' }, { status: 500 });
     }
 
-    const state = signState(user.id);
+    // `platform` tells the callback whether to redirect (web) or render a
+    // "return to Telegram" page. Telegram users MUST run this OAuth in their
+    // external browser — Google blocks its consent screen inside Telegram's
+    // mobile webview (Error 403: disallowed_useragent).
+    const platform = request.nextUrl.searchParams.get('platform') === 'telegram'
+      ? 'telegram'
+      : 'web';
+    const state = signState(user.id, platform);
 
     const params = new URLSearchParams({
       client_id: clientId,

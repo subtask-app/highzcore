@@ -2,18 +2,23 @@
 
 // When the app is opened inside Telegram, this component:
 //   1. Reads `window.Telegram.WebApp.initData` (signed payload from Telegram)
-//   2. POSTs it to /api/telegram/link
-//   3. On success, navigates to the returned dashboard route
+//   2. Checks whether a Supabase session already exists
+//   3. If NOT, POSTs initData to /api/telegram/link to mint one, then routes
+//      to the returned dashboard
 //
-// Cached on `initData.hash` so it only fires once per session, not on every
-// route change.
+// The key correctness rule: the decision to (re)link is driven by "is there
+// a live session?", NOT by a cached initData hash. The old hash-cache version
+// would skip re-linking after the Supabase cookie expired, leaving returning
+// mobile users stranded on /login — where tapping "Sign in with Google"
+// fails with Google's `disallowed_useragent` inside Telegram's webview.
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 
-// window.Telegram typing lives in @/lib/telegram/webapp (single source of truth).
-
-const SEEN_KEY = 'hzcr_tg_linked_hash';
+// Module-level guard so client-side route changes within a single page load
+// don't re-trigger the link. Resets naturally on a full reload.
+let inFlightOrDone = false;
 
 export default function TelegramAutoLink() {
   const router = useRouter();
@@ -21,21 +26,20 @@ export default function TelegramAutoLink() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const tg = window.Telegram?.WebApp;
-    if (!tg || !tg.initData) return;            // not inside Telegram
+    if (!tg || !tg.initData) return; // not inside Telegram
+    if (inFlightOrDone) return;
+    inFlightOrDone = true;
 
     // Tell Telegram we're ready and want full viewport.
     try { tg.ready(); tg.expand(); } catch {}
 
-    // Pull the hash from initData so we don't re-link on every render.
-    const params = new URLSearchParams(tg.initData);
-    const hash = params.get('hash');
-    if (!hash) return;
-    try {
-      if (window.localStorage.getItem(SEEN_KEY) === hash) return;
-    } catch {}
-
     (async () => {
       try {
+        const supabase = createClient();
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) return; // already authenticated — nothing to do
+
+        // No session → mint one from the signed Telegram initData.
         const res = await fetch('/api/telegram/link', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -44,12 +48,13 @@ export default function TelegramAutoLink() {
         const data = await res.json();
         if (!res.ok) {
           console.warn('Telegram link failed:', data);
+          inFlightOrDone = false; // allow a retry on next mount
           return;
         }
-        try { window.localStorage.setItem(SEEN_KEY, hash); } catch {}
         if (data.redirect) router.replace(data.redirect);
       } catch (e) {
         console.warn('Telegram link error:', e);
+        inFlightOrDone = false; // allow a retry on next mount
       }
     })();
   }, [router]);

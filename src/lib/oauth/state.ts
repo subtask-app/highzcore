@@ -10,10 +10,13 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
 const DEFAULT_TTL_SECONDS = 10 * 60; // 10 minutes — covers user reading the consent screen.
 
+export type GrantPlatform = 'web' | 'telegram';
+
 interface StatePayload {
-  uid: string;     // user id we're granting access for
-  exp: number;     // unix-seconds expiry
-  nonce: string;   // 16 random bytes (base64url) — prevents replay
+  uid: string;            // user id we're granting access for
+  exp: number;            // unix-seconds expiry
+  nonce: string;          // 16 random bytes (base64url) — prevents replay
+  plat?: GrantPlatform;   // where the grant was initiated — drives the callback's UX
 }
 
 function secret(): string {
@@ -38,11 +41,16 @@ function hmac(payload: string): string {
 }
 
 /** Mint a signed state for the given user id. Default TTL: 10 minutes. */
-export function signState(uid: string, ttlSeconds: number = DEFAULT_TTL_SECONDS): string {
+export function signState(
+  uid: string,
+  platform: GrantPlatform = 'web',
+  ttlSeconds: number = DEFAULT_TTL_SECONDS,
+): string {
   const payload: StatePayload = {
     uid,
     exp: Math.floor(Date.now() / 1000) + ttlSeconds,
     nonce: b64urlEncode(randomBytes(16)),
+    plat: platform,
   };
   const json = JSON.stringify(payload);
   const enc = b64urlEncode(json);
@@ -52,10 +60,11 @@ export function signState(uid: string, ttlSeconds: number = DEFAULT_TTL_SECONDS)
 export interface VerifyResult {
   ok: boolean;
   uid?: string;
+  platform?: GrantPlatform;
   reason?: 'malformed' | 'bad_signature' | 'expired';
 }
 
-/** Verify a state. Returns `{ ok: true, uid }` if valid, otherwise a reason. */
+/** Verify a state. Returns `{ ok: true, uid, platform }` if valid, else a reason. */
 export function verifyState(state: string | null | undefined): VerifyResult {
   if (!state || typeof state !== 'string' || !state.includes('.')) {
     return { ok: false, reason: 'malformed' };
@@ -83,5 +92,5 @@ export function verifyState(state: string | null | undefined): VerifyResult {
   if (Math.floor(Date.now() / 1000) > payload.exp) {
     return { ok: false, reason: 'expired' };
   }
-  return { ok: true, uid: payload.uid };
+  return { ok: true, uid: payload.uid, platform: payload.plat ?? 'web' };
 }

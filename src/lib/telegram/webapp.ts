@@ -61,6 +61,12 @@ export interface TelegramWebApp {
     notificationOccurred: (type: HapticNotificationType) => void;
     selectionChanged: () => void;
   };
+  // Opens a URL in the user's EXTERNAL system browser (not the in-app
+  // webview). Required for Google OAuth — Google rejects its OAuth pages
+  // inside embedded webviews (Error 403: disallowed_useragent).
+  openLink: (url: string, options?: { try_instant_view?: boolean }) => void;
+  // Opens a t.me link inside Telegram.
+  openTelegramLink: (url: string) => void;
 }
 
 declare global {
@@ -78,6 +84,15 @@ export function getTg(): TelegramWebApp | null {
 
 export function isInTelegram(): boolean {
   return !!getTg()?.initData;
+}
+
+// Hydration-safe boolean: false on the server + first client render, then
+// flips true after mount if we're inside Telegram. Use this for conditional
+// rendering so SSR and the first client paint agree.
+export function useIsTelegram(): boolean {
+  const [inside, setInside] = useState(false);
+  useEffect(() => { setInside(isInTelegram()); }, []);
+  return inside;
 }
 
 // ── Ready hook (SDK script loads async; this waits for it) ──────────────────
@@ -226,4 +241,16 @@ export function useTelegramThemeSync(): void {
 
 export function expandWebApp() {
   try { getTg()?.expand(); } catch {}
+}
+
+// Opens `url` in the EXTERNAL system browser when inside Telegram, falling
+// back to a normal new-tab open elsewhere. Use this for any Google OAuth
+// redirect — Telegram's mobile in-app webview is rejected by Google with
+// `disallowed_useragent`, the system browser is not.
+export function openExternal(url: string): void {
+  const tg = getTg();
+  if (tg && typeof tg.openLink === 'function') {
+    try { tg.openLink(url); return; } catch { /* fall through */ }
+  }
+  if (typeof window !== 'undefined') window.open(url, '_blank', 'noopener');
 }

@@ -8,15 +8,20 @@
 //   * default — a centered full card (used when there's room for one).
 //
 // Either CTA opens a guide modal that walks the worker through the four
-// Google screens BEFORE redirecting. No more cold-jumping into a "Choose an
-// account" page without context.
+// Google screens BEFORE redirecting.
+//
+// Telegram path: Google blocks its OAuth screen inside Telegram's mobile
+// webview (Error 403: disallowed_useragent). So inside Telegram we open the
+// OAuth URL in the EXTERNAL system browser and poll until the callback has
+// stored the token server-side — instead of a full-page redirect.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
+  Loader2,
   Lock,
   Shield,
   Sparkles,
@@ -24,27 +29,59 @@ import {
   Play as Youtube,
 } from 'lucide-react';
 import GoogleGrantExplainer from '@/components/worker/GoogleGrantExplainer';
+import { isInTelegram, openExternal } from '@/lib/telegram/webapp';
+import { useYouTubeAccess } from '@/hooks/useYouTubeAccess';
 
 interface Props {
   onAccessGranted?: () => void;
   compact?: boolean;
 }
 
-export default function GrantYouTubeAccess({ compact = false }: Props) {
+export default function GrantYouTubeAccess({ compact = false, onAccessGranted }: Props) {
   const [showGuide, setShowGuide] = useState(false);
   const [redirecting, setRedirecting] = useState(false);
+  const [waitingExternal, setWaitingExternal] = useState(false);
   const [error, setError] = useState('');
+  const { hasAccess, refresh } = useYouTubeAccess();
+
+  // While waiting on the external-browser grant, poll the server. When the
+  // access flag flips, notify the parent and close the guide.
+  useEffect(() => {
+    if (!waitingExternal) return;
+    const interval = setInterval(() => { void refresh(); }, 3000);
+    return () => clearInterval(interval);
+  }, [waitingExternal, refresh]);
+
+  useEffect(() => {
+    if (waitingExternal && hasAccess) {
+      setWaitingExternal(false);
+      setShowGuide(false);
+      onAccessGranted?.();
+    }
+  }, [waitingExternal, hasAccess, onAccessGranted]);
 
   const continueToGoogle = async () => {
     try {
       setRedirecting(true);
       setError('');
-      const res = await fetch('/api/request-youtube-access');
+      const telegram = isInTelegram();
+      const url = telegram
+        ? '/api/request-youtube-access?platform=telegram'
+        : '/api/request-youtube-access';
+      const res = await fetch(url);
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body?.error ?? 'Failed to start YouTube authorization');
       }
       const data = await res.json();
+
+      if (telegram) {
+        // External browser — Telegram's webview can't run Google OAuth.
+        openExternal(data.oauthUrl);
+        setRedirecting(false);
+        setWaitingExternal(true);
+        return;
+      }
       window.location.href = data.oauthUrl;
     } catch (e: any) {
       setError(e?.message ?? 'Something went wrong starting the grant');
@@ -61,21 +98,16 @@ export default function GrantYouTubeAccess({ compact = false }: Props) {
           animate={{ opacity: 1, y: 0 }}
           className="relative overflow-hidden rounded-2xl border-2 border-amber-400/60 bg-gradient-to-br from-amber-500/15 via-amber-500/5 to-slate-900/60 backdrop-blur-md p-5 md:p-6 shadow-[0_20px_60px_-15px_rgba(251,191,36,0.35)]"
           style={{
-            // Pulsing border glow draws the eye even when the user is
-            // scrolling past — this banner is a real gate, not a hint.
             animation: 'hzcr-attn 2.6s ease-in-out infinite',
           }}
         >
-          {/* warning glow */}
           <div className="absolute -top-10 -right-10 h-48 w-48 rounded-full bg-amber-500/25 blur-3xl pointer-events-none" />
 
           <div className="relative flex items-start gap-4 flex-col sm:flex-row sm:items-center">
-            {/* Icon: lock with a pulsing red dot on top to scream "blocked" */}
             <div className="relative flex-shrink-0">
               <div className="inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 shadow-[0_12px_30px_-10px_rgba(251,191,36,0.7)]">
                 <Lock className="h-6 w-6 text-slate-950" strokeWidth={2.5} />
               </div>
-              {/* live "attention" dot */}
               <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
                 <span className="absolute inset-0 inline-flex rounded-full bg-red-400 opacity-75 animate-ping" />
                 <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-red-500 ring-2 ring-slate-950" />
@@ -83,7 +115,6 @@ export default function GrantYouTubeAccess({ compact = false }: Props) {
             </div>
 
             <div className="flex-1 min-w-0">
-              {/* Required badge */}
               <div className="inline-flex items-center gap-1.5 mb-2 px-2 py-0.5 rounded-full bg-red-500/20 border border-red-400/40 text-red-200 text-[10px] font-black uppercase tracking-[0.2em]">
                 <AlertTriangle className="h-3 w-3" />
                 Action required
@@ -117,7 +148,9 @@ export default function GrantYouTubeAccess({ compact = false }: Props) {
           open={showGuide}
           onClose={() => setShowGuide(false)}
           onContinue={continueToGoogle}
+          onRecheck={() => void refresh()}
           redirecting={redirecting}
+          waitingExternal={waitingExternal}
           error={error}
         />
       </>
@@ -184,7 +217,9 @@ export default function GrantYouTubeAccess({ compact = false }: Props) {
         open={showGuide}
         onClose={() => setShowGuide(false)}
         onContinue={continueToGoogle}
+        onRecheck={() => void refresh()}
         redirecting={redirecting}
+        waitingExternal={waitingExternal}
         error={error}
       />
     </>
@@ -197,11 +232,13 @@ interface GuideModalProps {
   open: boolean;
   onClose: () => void;
   onContinue: () => void;
+  onRecheck: () => void;
   redirecting: boolean;
+  waitingExternal: boolean;
   error: string;
 }
 
-function GrantGuideModal({ open, onClose, onContinue, redirecting, error }: GuideModalProps) {
+function GrantGuideModal({ open, onClose, onContinue, onRecheck, redirecting, waitingExternal, error }: GuideModalProps) {
   return (
     <AnimatePresence>
       {open && (
@@ -231,21 +268,54 @@ function GrantGuideModal({ open, onClose, onContinue, redirecting, error }: Guid
             </button>
 
             <div className="p-6 md:p-8">
-              <p className="text-blue-300 text-[10px] font-bold uppercase tracking-[0.25em] mb-2">First-time setup</p>
-              <h2 className="text-2xl font-black text-white leading-tight mb-4">
-                Connect your YouTube account.
-              </h2>
+              {waitingExternal ? (
+                /* External-browser wait state (Telegram path). */
+                <div className="text-center py-4">
+                  <div className="inline-flex items-center justify-center h-16 w-16 rounded-full bg-blue-500/10 border border-blue-500/30 mb-5">
+                    <Loader2 className="h-7 w-7 text-blue-300 animate-spin" />
+                  </div>
+                  <h2 className="text-xl font-bold text-white leading-tight mb-2">
+                    Finish in your browser…
+                  </h2>
+                  <p className="text-white/65 text-sm leading-relaxed mb-5">
+                    We opened Google sign-in in your phone's browser — Telegram can't
+                    show it directly. Approve YouTube access there, then come back.
+                    This updates on its own the moment you're done.
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <button
+                      onClick={onRecheck}
+                      className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 hover:from-blue-400 hover:to-blue-600 py-2.5 px-4 text-white font-semibold text-sm transition cursor-pointer"
+                    >
+                      I've connected — check now
+                    </button>
+                    <button
+                      onClick={onContinue}
+                      className="inline-flex items-center justify-center px-4 py-2.5 rounded-xl border border-white/10 text-white/65 hover:text-white hover:border-white/25 transition cursor-pointer text-sm"
+                    >
+                      Reopen
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <p className="text-blue-300 text-[10px] font-bold uppercase tracking-[0.25em] mb-2">First-time setup</p>
+                  <h2 className="text-2xl font-black text-white leading-tight mb-4">
+                    Connect your YouTube account.
+                  </h2>
 
-              <GoogleGrantExplainer />
+                  <GoogleGrantExplainer />
 
-              <button
-                onClick={onContinue}
-                disabled={redirecting}
-                className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 hover:from-blue-400 hover:to-blue-600 py-3 px-4 text-white font-semibold text-sm transition cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {redirecting ? 'Redirecting to Google…' : 'I understand — continue to Google'}
-                {!redirecting && <ArrowRight className="h-4 w-4" />}
-              </button>
+                  <button
+                    onClick={onContinue}
+                    disabled={redirecting}
+                    className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 hover:from-blue-400 hover:to-blue-600 py-3 px-4 text-white font-semibold text-sm transition cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {redirecting ? 'Opening Google…' : 'I understand — continue to Google'}
+                    {!redirecting && <ArrowRight className="h-4 w-4" />}
+                  </button>
+                </>
+              )}
               {error && (
                 <p className="mt-3 text-xs text-red-300">{error}</p>
               )}

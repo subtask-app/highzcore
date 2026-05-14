@@ -27,7 +27,10 @@ import {
   hapticSelect,
   hapticSuccess,
   hapticWarn,
+  isInTelegram,
+  openExternal,
 } from '@/lib/telegram/webapp';
+import { useYouTubeAccess } from '@/hooks/useYouTubeAccess';
 
 export interface TaskFlowTask {
   contract_id: string;
@@ -39,7 +42,7 @@ export interface TaskFlowTask {
   verified_count: number;
 }
 
-type Phase = 'brief' | 'grant' | 'subscribe' | 'verifying' | 'verified' | 'warning';
+type Phase = 'brief' | 'grant' | 'grant-waiting' | 'subscribe' | 'verifying' | 'verified' | 'warning';
 
 interface Props {
   open: boolean;
@@ -57,6 +60,11 @@ export default function TaskFlowModal({ open, task, hasYouTubeAccess, initialPha
   const [verifyError, setVerifyError] = useState<string | null>(null);
   const [verifiedPayload, setVerifiedPayload] = useState<{ payout_amount?: number; new_balance?: number; contract_completed?: boolean } | null>(null);
 
+  // Live YouTube-access status — drives both the brief→subscribe gate and the
+  // polling we do while the worker is granting access in an external browser.
+  const { hasAccess: ytLive, refresh: refreshYt } = useYouTubeAccess();
+  const accessGranted = hasYouTubeAccess || ytLive;
+
   // Reset phase whenever the modal opens for a new task.
   useEffect(() => {
     if (!open || !task) return;
@@ -71,28 +79,64 @@ export default function TaskFlowModal({ open, task, hasYouTubeAccess, initialPha
 
   // ── Step 1 → 2/3 transition: from brief, gate on YouTube access.
   const advanceFromBrief = () => {
-    if (hasYouTubeAccess) setPhase('subscribe');
+    if (accessGranted) setPhase('subscribe');
     else setPhase('grant');
   };
 
-  // ── Step 2: redirect to YouTube grant.
-  // We pass the contract id back in the callback URL via `?claim=` so the
-  // dashboard can auto-resume this modal on return.
+  // ── Step 2: start the YouTube grant.
+  //
+  // Two very different paths:
+  //   • Inside Telegram — Google blocks its OAuth screen in Telegram's mobile
+  //     webview (Error 403: disallowed_useragent). So we open the OAuth URL in
+  //     the EXTERNAL browser via tg.openLink(), then sit in 'grant-waiting'
+  //     and poll until the callback has stored the token server-side.
+  //   • On web — a normal full-page redirect works. We stash the contract id
+  //     in localStorage so the dashboard can auto-resume this modal on return.
   const startYouTubeGrant = async () => {
     if (!task) return;
+    const telegram = isInTelegram();
     try {
-      const res = await fetch(`/api/request-youtube-access?claim=${encodeURIComponent(task.contract_id)}`);
+      const qs = new URLSearchParams({ claim: task.contract_id });
+      if (telegram) qs.set('platform', 'telegram');
+      const res = await fetch(`/api/request-youtube-access?${qs.toString()}`);
       if (!res.ok) throw new Error('Failed to start YouTube authorization');
       const data = await res.json();
-      // Append our claim param to the OAuth URL via a return-state cookie
-      // would be ideal, but the simpler approach is: redirect back to the
-      // dashboard with the contract id in localStorage. We set it here.
+
+      if (telegram) {
+        // External browser — Telegram webview can't do Google OAuth.
+        openExternal(data.oauthUrl);
+        setPhase('grant-waiting');
+        return;
+      }
+      // Web: full-page redirect, with auto-resume breadcrumb.
       try { window.localStorage.setItem('hzcr_pending_claim', task.contract_id); } catch {}
       window.location.href = data.oauthUrl;
     } catch (e: any) {
       setVerifyError(e?.message ?? 'Could not start YouTube grant');
     }
   };
+
+  // While in 'grant-waiting', poll the server for the access flag flipping
+  // true (the external-browser callback writes it). Advance automatically.
+  useEffect(() => {
+    if (phase !== 'grant-waiting') return;
+    let cancelled = false;
+    const tick = async () => {
+      await refreshYt();
+    };
+    void tick();
+    const interval = setInterval(tick, 3000);
+    return () => { cancelled = true; clearInterval(interval); void cancelled; };
+  }, [phase, refreshYt]);
+
+  // When the poll (or anything else) reports access while we're waiting,
+  // jump straight to the subscribe step.
+  useEffect(() => {
+    if (phase === 'grant-waiting' && ytLive) {
+      hapticSuccess();
+      setPhase('subscribe');
+    }
+  }, [phase, ytLive]);
 
   // ── Step 4: verify.
   const verify = async () => {
@@ -140,13 +184,14 @@ export default function TaskFlowModal({ open, task, hasYouTubeAccess, initialPha
   const mainBtn = (() => {
     if (!open || !task) return { show: false, text: '', click: () => {} };
     switch (phase) {
-      case 'brief':      return { show: true, text: 'Continue',                   click: () => { hapticTap(); advanceFromBrief(); } };
-      case 'grant':      return { show: true, text: 'Continue to Google',         click: () => { hapticTap(); startYouTubeGrant(); } };
-      case 'subscribe':  return { show: true, text: 'I subscribed — verify',      click: () => { hapticBump(); verify(); } };
-      case 'verifying':  return { show: true, text: 'Checking…',                  click: () => {} };
-      case 'verified':   return { show: true, text: 'Find another task',          click: () => { hapticTap(); onClose(); } };
-      case 'warning':    return { show: true, text: 'Try again',                  click: () => { hapticTap(); setPhase('subscribe'); } };
-      default:           return { show: false, text: '', click: () => {} };
+      case 'brief':         return { show: true, text: 'Continue',                click: () => { hapticTap(); advanceFromBrief(); } };
+      case 'grant':         return { show: true, text: 'Continue to Google',      click: () => { hapticTap(); startYouTubeGrant(); } };
+      case 'grant-waiting': return { show: true, text: 'I\'ve connected — check', click: () => { hapticTap(); void refreshYt(); } };
+      case 'subscribe':     return { show: true, text: 'I subscribed — verify',   click: () => { hapticBump(); verify(); } };
+      case 'verifying':     return { show: true, text: 'Checking…',               click: () => {} };
+      case 'verified':      return { show: true, text: 'Find another task',       click: () => { hapticTap(); onClose(); } };
+      case 'warning':       return { show: true, text: 'Try again',               click: () => { hapticTap(); setPhase('subscribe'); } };
+      default:              return { show: false, text: '', click: () => {} };
     }
   })();
 
@@ -154,7 +199,7 @@ export default function TaskFlowModal({ open, task, hasYouTubeAccess, initialPha
     text: mainBtn.text || ' ',
     onClick: mainBtn.click,
     show: mainBtn.show,
-    progress: phase === 'verifying',
+    progress: phase === 'verifying' || phase === 'grant-waiting',
     disabled: phase === 'verifying',
   });
 
@@ -281,6 +326,46 @@ export default function TaskFlowModal({ open, task, hasYouTubeAccess, initialPha
                   <p className="mt-3 text-xs text-red-300">{verifyError}</p>
                 )}
               </>
+            )}
+
+            {/* ── PHASE 2b: Waiting for the external-browser grant (Telegram) ─ */}
+            {phase === 'grant-waiting' && (
+              <div className="text-center py-4">
+                <div className="inline-flex items-center justify-center h-16 w-16 rounded-full bg-blue-500/10 border border-blue-500/30 mb-5">
+                  <Loader2 className="h-7 w-7 text-blue-300 animate-spin" />
+                </div>
+                <h2 className="text-xl font-bold text-white leading-tight mb-2">
+                  Finish in your browser…
+                </h2>
+                <p className="text-white/65 text-sm leading-relaxed mb-5">
+                  We opened Google sign-in in your phone's browser — Telegram can't
+                  show it directly. Approve YouTube access there, then come back to
+                  Telegram. This screen updates on its own the moment you're done.
+                </p>
+                <div className="rounded-xl bg-slate-950/50 border border-white/10 p-3 mb-5 text-left">
+                  <p className="text-xs text-white/55 leading-relaxed">
+                    Didn't see a browser open? Tap below to try again, or check
+                    your other browser tabs for the Google screen.
+                  </p>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <button
+                    onClick={() => { hapticTap(); void refreshYt(); }}
+                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 hover:from-blue-400 hover:to-blue-600 py-2.5 px-4 text-white font-semibold text-sm transition cursor-pointer"
+                  >
+                    I've connected — check now
+                  </button>
+                  <button
+                    onClick={() => { hapticTap(); startYouTubeGrant(); }}
+                    className="inline-flex items-center justify-center px-4 py-2.5 rounded-xl border border-white/10 text-white/65 hover:text-white hover:border-white/25 transition cursor-pointer text-sm"
+                  >
+                    Reopen
+                  </button>
+                </div>
+                {verifyError && (
+                  <p className="mt-3 text-xs text-red-300">{verifyError}</p>
+                )}
+              </div>
             )}
 
             {/* ── PHASE 3: Subscribe ─────────────────────────────────────── */}
