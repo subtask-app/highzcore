@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -68,7 +68,19 @@ type Notification = {
   message: string;
 };
 
-export default function WorkerDashboard() {
+// Next 16 requires anything that reads useSearchParams() (or that touches
+// `nuqs`, the searchParams pattern, etc.) to live inside a <Suspense>
+// boundary so the prerender can bail cleanly during static analysis.
+// The actual dashboard is `WorkerDashboardInner`; the default export wraps it.
+export default function WorkerDashboardPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-950 text-white" />}>
+      <WorkerDashboardInner />
+    </Suspense>
+  );
+}
+
+function WorkerDashboardInner() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'dashboard' | 'available-tasks' | 'my-tasks' | 'withdrawals' | 'leaderboard'>('dashboard');
