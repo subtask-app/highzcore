@@ -7,6 +7,7 @@ import { motion } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import { ArrowLeft, TrendingUp } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import TelegramBack from '@/components/telegram/TelegramBack';
 
 const FullLogo = dynamic(() => import('@/components/FullLogo'), { ssr: false });
 
@@ -25,10 +26,6 @@ export default function ClientSignupPage() {
         provider: 'google',
         options: {
           redirectTo: `${window.location.origin}/auth/callback?role=client`,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-          },
           scopes: 'email profile',
         },
       });
@@ -45,11 +42,14 @@ export default function ClientSignupPage() {
       {/* Animated Background Grid */}
       <div className="fixed inset-0 bg-[linear-gradient(to_right,#3b82f610_1px,transparent_1px),linear-gradient(to_bottom,#3b82f610_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_110%)]" />
 
-      {/* Back to Home */}
+      {/* Telegram's native top-left back-arrow (no-op outside Telegram). */}
+      <TelegramBack href="/" />
+
+      {/* Web-only in-page back link */}
       <motion.div
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
-        className="absolute top-8 left-8"
+        className="absolute top-4 left-4 z-20"
       >
         <Link
           href="/for-clients"

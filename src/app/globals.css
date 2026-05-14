@@ -46,3 +46,40 @@ body {
 .perspective-1000 {
   perspective: 1000px;
 }
+
+/* Vertical scroll without showing the scrollbar — used on modals and overlays
+   where the scrollbar would visually clash with the rounded surface and cause
+   a horizontal jump the moment content overflows. */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  overscroll-behavior: contain;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* iOS Safari zooms when a tapped input has font-size < 16px. The mini app
+   runs in Telegram's WebView (which behaves like Safari/Chrome on the
+   respective OS) so we keep form fields at >= 16px to avoid the jolt. */
+input,
+textarea,
+select {
+  font-size: 16px;
+}
+@media (min-width: 768px) {
+  input,
+  textarea,
+  select {
+    font-size: 14px;
+  }
+}
+
+/* Tap-highlight on iOS Safari is grey by default — too visually loud against
+   the dark dashboard surfaces. Strip it; we render our own hover/active
+   states. */
+a, button {
+  -webkit-tap-highlight-color: transparent;
+}

@@ -1,338 +1,165 @@
-# SubTask.ng - Project Status
+# Highzcore — Project Status
 
-## Overview
-SubTask.ng is a YouTube growth platform connecting Nigerian content creators with workers to help channels reach the 1,000 subscriber monetization threshold.
+**Last updated:** 2026-05-12 · End of M14 (pre-launch hardening)
 
-**Last Updated**: May 6, 2026
-**Status**: Initial Foundation Complete (30% done)
+A two-sided marketplace connecting YouTube creators with workers who help them reach the 1,000-subscriber monetization threshold. Distributed primarily as a **Telegram Mini App** with a single `@HighzcoreOfficial_bot` handling acquisition, notifications, live support, and a community channel. Web is the fallback surface.
 
----
-
-## ✅ Completed Tasks
-
-### 1. Next.js Project Initialization ✓
-- **Framework**: Next.js 16.2.4 with TypeScript
-- **Styling**: Tailwind CSS configured
-- **App Router**: Enabled with src directory structure
-- **Location**: `/subtask-app`
-
-### 2. Database Architecture ✓
-- **File**: `supabase-schema.sql`
-- **Tables Created**:
-  - `users` - Client, worker, and admin accounts
-  - `tasks` - YouTube subscription orders
-  - `completions` - Tracked task completions
-  - `withdrawals` - Worker payout requests
-  - `transactions` - Audit trail for all money movements
-- **Features**:
-  - Row-level security policies
-  - Automated triggers for wallet updates
-  - Task completion tracking
-  - Withdrawal processing automation
-
-### 3. Type Definitions ✓
-- **File**: `src/types/database.types.ts`
-- **Includes**:
-  - All database table interfaces
-  - User roles enum
-  - Task status enum
-  - Withdrawal status enum
-  - Pricing packages constants
-  - Helper types with relations
-
-### 4. Supabase Integration ✓
-- **Client-side**: `src/lib/supabase/client.ts`
-- **Server-side**: `src/lib/supabase/server.ts`
-- **Middleware**: `src/lib/supabase/middleware.ts`
-- **Authentication**: Route protection for dashboard and admin areas
-- **SSR Support**: Configured with Next.js App Router
-
-### 5. Landing Page ✓
-- **File**: `src/app/page.tsx`
-- **Sections**:
-  - Hero section with dual CTAs (creators & workers)
-  - Trust indicators (stats)
-  - How it works for creators (4-step process)
-  - Pricing packages (4 tiers + custom calculator)
-  - Interactive pricing calculator with slider
-  - How it works for workers
-  - Earnings calculator
-  - Trust & safety features
-  - Final CTA section
-  - Footer with navigation links
-- **Features**:
-  - Responsive design
-  - Interactive pricing calculator
-  - Clear value propositions for both sides
-  - Social proof elements
-
-### 6. Utility Functions ✓
-- **File**: `src/lib/utils.ts`
-- **Functions**:
-  - Currency formatting (Nigerian Naira)
-  - Number formatting
-  - Platform fee calculations
-  - Price calculations
-  - Tailwind class merging
-
-### 7. Documentation ✓
-- **Setup Guide**: `SETUP_GUIDE.md` - Step-by-step setup instructions
-- **Environment Template**: `.env.local.example`
-- **Project Status**: `PROJECT_STATUS.md` (this file)
+**Status:** all 14 planned milestones complete. Code is launch-ready. Operational work (Vercel deploy, Telegram production webhook, pg_cron setup) is documented in [PRE_LAUNCH_CHECKLIST.md](PRE_LAUNCH_CHECKLIST.md).
 
 ---
 
-## 🚧 Pending Tasks
+## Stack
 
-### High Priority (Core Functionality)
-
-#### 1. Google Cloud & YouTube API Setup
-- [ ] Create Google Cloud project
-- [ ] Enable YouTube Data API v3
-- [ ] Create API credentials
-- [ ] Configure OAuth 2.0 client
-- [ ] Set up OAuth consent screen
-- [ ] Add required scopes
-- **Estimated Time**: 1-2 hours
-- **Documentation**: See SETUP_GUIDE.md Step 2
-
-#### 2. Supabase Configuration
-- [ ] Create Supabase project
-- [ ] Run database schema SQL
-- [ ] Configure Google OAuth provider
-- [ ] Set up RLS policies
-- [ ] Get API keys
-- **Estimated Time**: 30 minutes
-- **Documentation**: See SETUP_GUIDE.md Step 1
-
-#### 3. Authentication System
-- [ ] Google OAuth login page (`/login`)
-- [ ] Sign-up page with role selection (`/signup`)
-- [ ] Auth callback handler
-- [ ] Session management
-- [ ] Role-based redirect after login
-- **Files to Create**:
-  - `src/app/login/page.tsx`
-  - `src/app/signup/page.tsx`
-  - `src/app/auth/callback/route.ts`
-
-#### 4. Worker Dashboard
-- [ ] Available tasks list view
-- [ ] Task detail modal
-- [ ] YouTube channel preview
-- [ ] Task completion flow
-- [ ] Wallet balance display
-- [ ] Earnings history
-- [ ] Withdrawal form
-- [ ] Withdrawal history
-- **Files to Create**:
-  - `src/app/dashboard/worker/page.tsx`
-  - `src/app/dashboard/worker/tasks/page.tsx`
-  - `src/app/dashboard/worker/withdraw/page.tsx`
-  - `src/components/worker/*`
-
-#### 5. Client Dashboard
-- [ ] Order submission form
-- [ ] YouTube channel validation
-- [ ] Package selection
-- [ ] Payment instructions display
-- [ ] Payment proof upload
-- [ ] Order progress tracker
-- [ ] Order history
-- **Files to Create**:
-  - `src/app/dashboard/client/page.tsx`
-  - `src/app/dashboard/client/new-order/page.tsx`
-  - `src/app/dashboard/client/orders/[id]/page.tsx`
-  - `src/components/client/*`
-
-#### 6. Admin Dashboard
-- [ ] Pending payments queue
-- [ ] Payment confirmation flow
-- [ ] Active orders overview
-- [ ] Pending withdrawals queue
-- [ ] Withdrawal processing
-- [ ] User management
-- [ ] Analytics overview
-- [ ] Support inbox
-- **Files to Create**:
-  - `src/app/admin/page.tsx`
-  - `src/app/admin/payments/page.tsx`
-  - `src/app/admin/withdrawals/page.tsx`
-  - `src/app/admin/users/page.tsx`
-  - `src/components/admin/*`
-
-#### 7. YouTube API Integration
-- [ ] Subscription verification API route
-- [ ] Channel info fetching
-- [ ] OAuth token management
-- [ ] Periodic subscription checks
-- [ ] Unsubscribe detection
-- **Files to Create**:
-  - `src/app/api/youtube/verify/route.ts`
-  - `src/app/api/youtube/channel/route.ts`
-  - `src/lib/youtube.ts`
-
-#### 8. Wallet System
-- [ ] Credit worker wallet on task completion
-- [ ] Deduct from wallet on withdrawal
-- [ ] Transaction logging
-- [ ] Balance validation
-- [ ] Minimum withdrawal enforcement
-- **Files to Create**:
-  - `src/app/api/wallet/credit/route.ts`
-  - `src/app/api/wallet/withdraw/route.ts`
-  - `src/lib/wallet.ts`
-
-### Medium Priority (Enhanced Features)
-
-#### 9. Email Notifications
-- [ ] Set up Resend API
-- [ ] Order activated email
-- [ ] Order completed email
-- [ ] Task verified email
-- [ ] Withdrawal request received email
-- [ ] Withdrawal paid email
-- [ ] Admin alert emails
-- **Files to Create**:
-  - `src/lib/email.ts`
-  - `src/emails/*` (email templates)
-
-#### 10. Legal Pages
-- [ ] Terms of Service
-- [ ] Privacy Policy
-- [ ] FAQ page
-- [ ] Contact page
-- **Files to Create**:
-  - `src/app/terms/page.tsx`
-  - `src/app/privacy/page.tsx`
-  - `src/app/faq/page.tsx`
-  - `src/app/contact/page.tsx`
-
-#### 11. Live Chat Integration
-- [ ] Install Tawk.to or Crisp
-- [ ] Add widget to all pages
-- [ ] Configure admin notifications
-- **Files to Modify**:
-  - `src/app/layout.tsx`
-
-### Low Priority (Nice to Have)
-
-#### 12. Testing
-- [ ] End-to-end testing setup
-- [ ] Client flow test
-- [ ] Worker flow test
-- [ ] Admin flow test
-- [ ] Payment flow test
-
-#### 13. Deployment
-- [ ] Push to GitHub
-- [ ] Deploy to Vercel
-- [ ] Configure environment variables
-- [ ] Update OAuth redirect URLs
-- [ ] Test production deployment
+- **Frontend**: Next.js 16.2 (App Router, Turbopack) · React 19 · TypeScript 5 · Tailwind v4
+- **3D home page**: three.js · @react-three/fiber · @react-three/drei
+- **Database / Auth**: Supabase (Postgres 15 + Auth + Realtime + Storage)
+- **Email transport**: nodemailer over Gmail SMTP (free, ~500/day on personal Gmail)
+- **Telegram**: grammy bot framework (webhook-based)
+- **Media uploads**: Cloudinary
+- **Hosting target**: Vercel
+- **Cron**: pg_cron + pg_net (Supabase) calling Next.js drain endpoints
 
 ---
 
-## 📁 Current Project Structure
+## Milestone summary
+
+| # | Milestone | Status | Highlights |
+|---|---|---|---|
+| M0 | Foundation | ✅ | One authoritative `schema.sql` + atomic RPCs (`verify_completion`, `reject_completion`, `mark_withdrawal_paid`), proper RLS via `is_admin()`, realtime enabled, `middleware → proxy` rename, `database.types.ts` regenerated, centralized constants |
+| M1 | Email infrastructure | ✅ | `pending_emails` queue + 6 triggers + 8 HTML email templates + `/api/cron/process-emails` + `/api/cron/send-reminders` (2-min admin, 10-min client) |
+| M2 | Auth refactor | ✅ | Stripped YouTube scope from primary login, HMAC-signed OAuth `state`, dedicated grant flow in worker dashboard |
+| M3 | 3D home page | ✅ | CSS preloader, scroll-driven 3D scene with 5 camera waypoints, instanced workers, reduced-motion fallback |
+| M4 | Marketing pages | ✅ | Canonical `<Logo>` + `<Navbar>` + brand primitives (`Eyebrow`, `SectionHeading`, `Card`); `/for-clients` and `/for-workers` rewritten with seeded testimonials + FAQ accordions |
+| M5 | Client dashboard flow | ✅ | First-time welcome modal, empty-state 4-step guide, auto-pinned bank-detail message on contract creation, payment-proof upload via Cloudinary |
+| M6 | Worker task flow | ✅ | 5-phase TaskFlowModal (brief → grant explainer → subscribe → verify → result), self-verify RPC, soft warning + email on failed verify, slots-remaining bar on cards, auto-resume after Google grant |
+| M7 | Admin dashboard polish | ✅ | Atomic withdrawal payout via `mark_withdrawal_paid`, atomic reject via `reject_completion`, payment-proof preview + Activate strip, unread message badges with priority sort |
+| M8 | Telegram foundation | ✅ | grammy bot with `/start`, `/help`, `/support`, `/id`; webhook + initData verifier; auto-link mini-app users to Supabase via magic-link tokens |
+| M9 | Telegram notifications | ✅ | `pending_emails.channel` column ('email'\|'telegram'\|'telegram_channel'); `pick_channel(user_id)` SQL helper; 9 Telegram templates with deep-link `web_app` buttons |
+| M10 | Community + live support | ✅ | `support_messages` table + bot forwards user DMs to admin group → admin replies-to → bot relays back. Community channel announcements on contract activation. |
+| M11 | Mini app native UX | ✅ | Typed `useTelegramMainButton` / `useTelegramBackButton` / `haptic*` hooks; theme sync; hides marketing navbar inside Telegram; MainButton + BackButton wired into every modal |
+| M12 | Engagement | ✅ | Referrals via `?start=ref_<id>` with auto-bonus on first verified task; streak counter via verify trigger; leaderboard RPC + tab (today/week/month/all-time) |
+| M13 | Senior design pass | ✅ | Dead-code purge (6 unused 3D components); dashboards unified to brand cyan→blue gradient; canonical `<Button>` primitive; mobile tap-targets ≥ 40px; iOS-zoom prevention on inputs |
+| M14 | Pre-launch hardening | ✅ | Rate limit on `/api/verify-subscription` (15s cooldown + 20-attempt cap, auto-reject); URL-protocol CHECK constraints; comprehensive deploy runbook |
+
+---
+
+## What's in the box
+
+### Database (7 migrations)
 
 ```
-subtask-app/
-├── .env.local.example          # Environment template
-├── .env.local                  # Your local config (create this)
-├── supabase-schema.sql         # Database schema
-├── SETUP_GUIDE.md              # Setup instructions
-├── PROJECT_STATUS.md           # This file
-├── src/
-│   ├── app/
-│   │   ├── page.tsx            # Landing page ✓
-│   │   ├── layout.tsx          # Root layout
-│   │   ├── globals.css         # Global styles
-│   │   └── api/                # API routes (to be built)
-│   ├── components/             # Reusable components (to be built)
-│   ├── lib/
-│   │   ├── supabase/
-│   │   │   ├── client.ts       # Browser client ✓
-│   │   │   ├── server.ts       # Server client ✓
-│   │   │   └── middleware.ts   # Auth middleware ✓
-│   │   └── utils.ts            # Utility functions ✓
-│   ├── types/
-│   │   └── database.types.ts   # Type definitions ✓
-│   └── middleware.ts           # Request middleware ✓
-├── public/                     # Static assets
-├── package.json                # Dependencies
-├── tsconfig.json               # TypeScript config
-└── tailwind.config.ts          # Tailwind config
+schema.sql                                  — baseline schema, RLS, RPCs
+migrations/0001_email_queue.sql             — notification queue + triggers
+migrations/0002_worker_task_flow.sql        — self_verify_completion RPC + retry counter
+migrations/0003_telegram_foundation.sql     — telegram_user_id + linked_at on users
+migrations/0004_notification_channels.sql   — channel column + pick_channel() helper
+migrations/0005_support_and_community.sql   — support_messages table + community channel
+migrations/0006_engagement.sql              — referrals + streaks + leaderboard
+migrations/0007_security_hardening.sql      — URL protocol CHECK constraints
+```
+
+### App routes
+
+```
+src/app/
+├── page.tsx                                — 3D scroll-driven home (M3)
+├── for-clients/                            — marketing (M4)
+├── for-workers/                            — marketing (M4)
+├── privacy/, terms/                        — legal
+├── login/, signup/                         — Google OAuth flows
+├── dashboard/
+│   ├── client/                             — campaigns, messages, payment proof
+│   ├── worker/                             — tasks, withdrawals, leaderboard, referrals
+│   └── admin/                              — contracts, withdrawals, support, users
+├── auth/
+│   ├── callback/                           — Google sign-in OAuth callback
+│   └── youtube-callback/                   — YouTube grant OAuth callback (HMAC-signed state)
+└── api/
+    ├── contracts/[id]/pin-instructions/    — auto-pin bank details after create
+    ├── contracts/[id]/payment-proof/       — Cloudinary URL → contract row + chat message
+    ├── verify-subscription/                — worker self-verify w/ rate limit
+    ├── request-youtube-access/             — issues Google OAuth URL
+    ├── leaderboard/                        — top earners
+    ├── telegram/
+    │   ├── webhook/                        — grammy callback
+    │   └── link/                           — mini-app initData → Supabase session
+    └── cron/
+        ├── process-emails/                 — drains pending_emails (email + telegram)
+        └── send-reminders/                 — 2-min admin / 10-min client reminders
+```
+
+### Library
+
+```
+src/lib/
+├── constants.ts                            — pricing, payout, min withdrawal, referral bonus
+├── utils.ts                                — cn, formatCurrency, formatNumber
+├── supabase/
+│   ├── client.ts                           — browser client
+│   ├── server.ts                           — SSR client (sets cookies)
+│   ├── middleware.ts                       — updateSession helper
+│   └── service.ts                          — service-role client (bypasses RLS)
+├── email/
+│   ├── types.ts                            — typed payloads + AnyTelegramType
+│   ├── render.ts                           — HTML email template registry
+│   ├── sender.ts                           — nodemailer wrapper
+│   └── templates/                          — 8 transactional email templates
+├── telegram/
+│   ├── bot.ts                              — grammy bot + commands + live-support routing
+│   ├── verify.ts                           — initData HMAC verifier
+│   ├── webapp.ts                           — typed WebApp accessor + hooks
+│   ├── render.ts                           — Telegram template registry
+│   ├── send.ts                             — sendTelegramNotification + sendTelegramChannelBroadcast
+│   └── templates/                          — 9 Telegram templates (mirror email + community_announcement)
+└── youtube/
+    ├── checkSubscription.ts                — YouTube Data API helpers
+    └── verifySubscription.ts               — client-side wrapper
+```
+
+### Components
+
+```
+src/components/
+├── brand/                                  — Logo, Navbar, Button, primitives (M4 / M13)
+├── home/                                   — preloader, scenes, scroll hook, theme bridge
+├── telegram/                               — TelegramAutoLink, TelegramBack, TelegramBridge
+├── worker/                                 — TaskFlowModal, GoogleGrantExplainer
+└── youtube/                                — GrantYouTubeAccess (compact + full)
 ```
 
 ---
 
-## 🎯 Next Steps
+## Critical operational notes
 
-### Immediate (This Week)
-1. **Set up Supabase** - Create project and run schema
-2. **Set up Google Cloud** - Enable YouTube API
-3. **Build authentication** - Login and signup flows
-4. **Create worker dashboard** - Core functionality
-
-### Short Term (Next 2 Weeks)
-1. **Build client dashboard** - Order submission and tracking
-2. **Implement YouTube API** - Subscription verification
-3. **Build admin panel** - Payment and withdrawal management
-4. **Set up email notifications** - Transactional emails
-
-### Medium Term (Month 1-2)
-1. **Testing** - End-to-end user flows
-2. **Documentation** - User guides
-3. **Legal pages** - Terms, Privacy, FAQ
-4. **Deployment** - Production launch on Vercel
+- **Bot token, webhook secret, OAuth state secret, cron secret are all different values** and must be rotated independently. Don't reuse.
+- **OAuth consent screen must be in "Production" mode** (not "Testing") — otherwise the 100-user cap blocks anyone past your test list. The "Google hasn't verified this app" warning that users see is normal; the mini app's pre-grant explainer walks them through bypassing it via "Advanced → Continue."
+- **Gmail SMTP has a daily send cap** (~500/day personal, ~2000/day Workspace). When you exceed it, swap nodemailer for SES/Mailgun. Code stays the same; only `src/lib/email/sender.ts` changes.
+- **pg_cron is the cron-of-record.** Vercel Cron would work too but the free tier caps at 100 invocations/day, which doesn't cover a per-minute drain.
+- **The `Logo3D / Scene3D / Text3DLogo / FlyingPlaneLogo / HeroIllustration / FloatingCards` components were removed in M13** because they were orphaned after M3. The actual 3D home page lives in `src/components/home/`.
 
 ---
 
-## 💰 Pricing Model
+## What I deliberately did NOT build
 
-| Package | Subscribers | Price | Platform Fee (20%) | Worker Pool (80%) |
-|---------|-------------|-------|-------------------|------------------|
-| Starter | 100 | ₦15,000 | ₦3,000 | ₦12,000 |
-| Growth | 500 | ₦75,000 | ₦15,000 | ₦60,000 |
-| Standard | 1,000 | ₦150,000 | ₦30,000 | ₦120,000 |
-| Premium | 2,000 | ₦280,000 | ₦56,000 | ₦224,000 |
-| Custom | Variable | ₦150/sub | 20% | 80% |
-
-**Worker Payout**: ₦120 per verified subscription task
+- **Automated test suite.** Manual smoke test plan in [PRE_LAUNCH_CHECKLIST.md](PRE_LAUNCH_CHECKLIST.md) §9 covers happy paths. Wire Playwright / Vitest post-launch when there's a stable surface to test against.
+- **Multi-currency support.** Pricing is still in ₦. Hardcoded across constants + templates. Marketing copy is already country-agnostic; the actual currency swap is one constant + one migration to a per-user `currency` field. Defer until you have demand outside Nigeria.
+- **Admin support inbox view inside the dashboard.** Live support runs via Telegram only — admins use Telegram's native group chat to triage. If admin volume grows, M10's `support_messages` table is already populated and a UI can be added without schema changes.
+- **Worker dashboard chat with admin.** Per-contract chat is client↔admin only. Workers reach support exclusively through the bot DM.
 
 ---
 
-## 🔧 Technology Stack
+## Numbers from the audit
 
-- **Frontend**: Next.js 16 + React + TypeScript
-- **Styling**: Tailwind CSS
-- **Database**: Supabase (PostgreSQL)
-- **Authentication**: Supabase Auth + Google OAuth
-- **API Integration**: YouTube Data API v3
-- **Email**: Resend
-- **Hosting**: Vercel
-- **Live Chat**: Tawk.to or Crisp
-
----
-
-## 📝 Notes
-
-- The platform uses manual payment confirmation (bank transfer) for MVP
-- All subscriptions are verified via official YouTube API
-- Workers must use real Google accounts (same as YouTube)
-- Minimum withdrawal is ₦1,000
-- Withdrawals processed within 3 business days
-- Platform targets Nigerian market initially
+- **Files**: ~85 source files (TypeScript + SQL + docs)
+- **Lines of TypeScript**: ~10,000
+- **Lines of SQL**: ~900 across schema + 7 migrations
+- **API routes**: 11
+- **Email + Telegram templates**: 17 (8 email + 9 Telegram)
+- **Typecheck**: clean (`npx tsc --noEmit` returns nothing)
+- **Lighthouse on /**: not yet measured; expect ~85+ once deployed (3D home is the variable)
 
 ---
 
-## 🐛 Known Issues
+## Next move
 
-None yet - project just initialized!
-
----
-
-## 📞 Support
-
-For setup help, see `SETUP_GUIDE.md`
-For business questions, refer to `SubTask Business Documentation.docx`
+Follow [PRE_LAUNCH_CHECKLIST.md](PRE_LAUNCH_CHECKLIST.md). The technical work is done.

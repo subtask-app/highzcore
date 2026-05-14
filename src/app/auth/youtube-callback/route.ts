@@ -1,97 +1,83 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { createClient as createServiceClient } from '@supabase/supabase-js';
+// GET /auth/youtube-callback
+//
+// Receives the YouTube-grant authorization code, verifies the signed `state`,
+// exchanges the code for tokens, and stores them on the user's row.
 
-/**
- * GET /auth/youtube-callback
- *
- * Handles the YouTube OAuth callback and stores the access token
- */
+import { NextResponse, type NextRequest } from 'next/server';
+import { serviceClient } from '@/lib/supabase/service';
+import { verifyState } from '@/lib/oauth/state';
+
+export const runtime = 'nodejs';
+
+function fail(request: NextRequest, reason: string): NextResponse {
+  return NextResponse.redirect(
+    new URL(`/dashboard/worker?youtube_error=${encodeURIComponent(reason)}`, request.url),
+  );
+}
+
 export async function GET(request: NextRequest) {
-  const requestUrl = new URL(request.url);
-  const code = requestUrl.searchParams.get('code');
-  const state = requestUrl.searchParams.get('state'); // User ID from the OAuth request
-  const error = requestUrl.searchParams.get('error');
+  const reqUrl = new URL(request.url);
+  const code = reqUrl.searchParams.get('code');
+  const stateParam = reqUrl.searchParams.get('state');
+  const oauthErr = reqUrl.searchParams.get('error');
 
-  if (error) {
-    console.error('YouTube OAuth error:', error);
-    return NextResponse.redirect(
-      new URL(`/dashboard/worker?error=youtube_auth_failed`, request.url)
-    );
+  if (oauthErr) return fail(request, oauthErr);
+  if (!code) return fail(request, 'missing_code');
+
+  // Verify the signed state — this is what gates writing to a user's row.
+  const stateCheck = verifyState(stateParam);
+  if (!stateCheck.ok || !stateCheck.uid) {
+    console.error('youtube-callback bad state:', stateCheck.reason);
+    return fail(request, stateCheck.reason ?? 'bad_state');
   }
+  const userId = stateCheck.uid;
 
-  if (!code || !state) {
-    return NextResponse.redirect(
-      new URL(`/dashboard/worker?error=missing_code`, request.url)
-    );
-  }
-
+  // Exchange code for tokens.
+  let tokenJson: any;
   try {
-    // Exchange code for access token
-    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         code,
-        client_id: process.env.GOOGLE_CLIENT_ID!,
-        client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-        redirect_uri: `${requestUrl.origin}/auth/youtube-callback`,
+        client_id: process.env.GOOGLE_CLIENT_ID ?? '',
+        client_secret: process.env.GOOGLE_CLIENT_SECRET ?? '',
+        redirect_uri: `${reqUrl.origin}/auth/youtube-callback`,
         grant_type: 'authorization_code',
       }),
     });
-
-    if (!tokenResponse.ok) {
-      const errorData = await tokenResponse.json();
-      console.error('Token exchange failed:', errorData);
-      return NextResponse.redirect(
-        new URL(`/dashboard/worker?error=token_exchange_failed`, request.url)
-      );
+    tokenJson = await tokenRes.json();
+    if (!tokenRes.ok) {
+      console.error('YouTube token exchange failed:', tokenJson);
+      return fail(request, 'token_exchange_failed');
     }
-
-    const tokens = await tokenResponse.json();
-    const { access_token, refresh_token } = tokens;
-
-    // Use service role client to update user's Google token (bypass RLS)
-    const supabaseAdmin = createServiceClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
-        }
-      }
-    );
-
-    // Update user's google_token in database
-    const { error: updateError } = await supabaseAdmin
-      .from('users')
-      .update({
-        google_token: access_token,
-        google_refresh_token: refresh_token || null,
-        youtube_access_granted: true,
-        youtube_access_granted_at: new Date().toISOString(),
-      })
-      .eq('id', state); // state contains the user ID
-
-    if (updateError) {
-      console.error('Error updating user YouTube token:', updateError);
-      return NextResponse.redirect(
-        new URL(`/dashboard/worker?error=failed_to_save_token`, request.url)
-      );
-    }
-
-    // Success! Redirect back to worker dashboard
-    return NextResponse.redirect(
-      new URL(`/dashboard/worker?youtube_granted=true`, request.url)
-    );
-
-  } catch (error: any) {
-    console.error('YouTube callback error:', error);
-    return NextResponse.redirect(
-      new URL(`/dashboard/worker?error=youtube_callback_failed`, request.url)
-    );
+  } catch (err) {
+    console.error('YouTube token exchange error:', err);
+    return fail(request, 'token_exchange_failed');
   }
+
+  const access_token: string | undefined = tokenJson.access_token;
+  const refresh_token: string | undefined = tokenJson.refresh_token;
+  if (!access_token) return fail(request, 'no_access_token');
+
+  // Persist on the user row via the service-role client (bypasses RLS).
+  const admin = serviceClient();
+  const { error: updateErr } = await admin
+    .from('users')
+    .update({
+      google_token: access_token,
+      google_refresh_token: refresh_token ?? null,
+      youtube_access_granted: true,
+      youtube_access_granted_at: new Date().toISOString(),
+    })
+    .eq('id', userId);
+
+  if (updateErr) {
+    console.error('YouTube token persist error:', updateErr);
+    return fail(request, 'persist_failed');
+  }
+
+  return NextResponse.redirect(
+    new URL('/dashboard/worker?youtube_granted=1', reqUrl),
+  );
 }

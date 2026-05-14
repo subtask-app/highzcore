@@ -1,140 +1,96 @@
+// Primary Google-OAuth callback for SIGN-UP and SIGN-IN.
+//
+// Login concerns ONLY. Does not request or store any YouTube scope/token.
+// The YouTube grant lives in its own flow (api/request-youtube-access +
+// auth/youtube-callback).
+//
+// Flow:
+//   1. Exchange the `code` for a Supabase session.
+//   2. If this is a brand-new user, create their `public.users` row with the
+//      role taken from the `?role=` query param (allow-list: client | worker).
+//   3. Redirect to the role-specific dashboard.
+
+import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { createClient as createServiceClient } from '@supabase/supabase-js';
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
+import { serviceClient } from '@/lib/supabase/service';
+
+type SignupRole = 'client' | 'worker';
+const ALLOWED_SIGNUP_ROLES: ReadonlyArray<SignupRole> = ['client', 'worker'];
+
+function dashboardPathFor(role: 'client' | 'worker' | 'admin'): string {
+  return role === 'admin' ? '/dashboard/admin'
+       : role === 'client' ? '/dashboard/client'
+       : '/dashboard/worker';
+}
+
+function redirect(url: URL): NextResponse {
+  return NextResponse.redirect(url);
+}
 
 export async function GET(request: NextRequest) {
-  const requestUrl = new URL(request.url);
-  const code = requestUrl.searchParams.get('code');
-  const role = requestUrl.searchParams.get('role');
+  const reqUrl = new URL(request.url);
+  const code = reqUrl.searchParams.get('code');
+  const roleParam = reqUrl.searchParams.get('role');
 
-  if (code) {
-    const supabase = await createClient();
-    const { error, data } = await supabase.auth.exchangeCodeForSession(code);
-
-    if (error) {
-      console.error('Auth callback error:', error);
-      return NextResponse.redirect(new URL(`/?error=${encodeURIComponent(error.message)}`, request.url));
-    }
-
-    if (data.user) {
-      // Check if user exists in users table
-      const { data: existingUser } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', data.user.id)
-        .single();
-
-      // If user doesn't exist, create user record with role
-      if (!existingUser) {
-        const userRole = role === 'client' ? 'client' : 'worker';
-
-        // Use service role client to bypass RLS for user creation
-        const supabaseAdmin = createServiceClient(
-          process.env.NEXT_PUBLIC_SUPABASE_URL!,
-          process.env.SUPABASE_SERVICE_ROLE_KEY!,
-          {
-            auth: {
-              autoRefreshToken: false,
-              persistSession: false
-            }
-          }
-        );
-
-        const { error: insertError } = await supabaseAdmin.from('users').insert({
-          id: data.user.id,
-          email: data.user.email,
-          role: userRole,
-          google_id: data.user.user_metadata.sub,
-          full_name: data.user.user_metadata.full_name || data.user.user_metadata.name,
-          avatar_url: data.user.user_metadata.avatar_url || data.user.user_metadata.picture,
-          google_token: data.session?.provider_token,
-        });
-
-        if (insertError) {
-          console.error('Error creating user:', insertError);
-
-          // If duplicate key error (user already exists), fetch their existing role
-          if (insertError.code === '23505') {
-            console.log('User already exists, fetching their role...');
-
-            const { data: existingUserData } = await supabaseAdmin
-              .from('users')
-              .select('role')
-              .eq('id', data.user.id)
-              .single();
-
-            if (existingUserData) {
-              const dashboardPath = existingUserData.role === 'admin' ? '/dashboard/admin'
-                : existingUserData.role === 'worker' ? '/dashboard/worker'
-                : '/dashboard/client';
-
-              const redirectUrl = new URL(dashboardPath, request.url);
-              const response = NextResponse.redirect(redirectUrl);
-
-              // Ensure session cookies are set
-              if (data.session) {
-                response.cookies.set('sb-access-token', data.session.access_token, {
-                  path: '/',
-                  maxAge: 60 * 60 * 24 * 7, // 7 days
-                });
-                response.cookies.set('sb-refresh-token', data.session.refresh_token, {
-                  path: '/',
-                  maxAge: 60 * 60 * 24 * 7, // 7 days
-                });
-              }
-
-              return response;
-            }
-          }
-
-          // For other errors, redirect to home
-          return NextResponse.redirect(new URL('/?error=Failed to create user account', request.url));
-        }
-
-        // Create redirect response with session cookies
-        const redirectUrl = new URL(userRole === 'worker' ? '/dashboard/worker' : '/dashboard/client', request.url);
-        const response = NextResponse.redirect(redirectUrl);
-
-        // Ensure session cookies are set
-        if (data.session) {
-          response.cookies.set('sb-access-token', data.session.access_token, {
-            path: '/',
-            maxAge: 60 * 60 * 24 * 7, // 7 days
-          });
-          response.cookies.set('sb-refresh-token', data.session.refresh_token, {
-            path: '/',
-            maxAge: 60 * 60 * 24 * 7, // 7 days
-          });
-        }
-
-        return response;
-      }
-
-      // User exists, redirect to their dashboard based on role
-      const dashboardPath = existingUser.role === 'admin' ? '/dashboard/admin'
-        : existingUser.role === 'worker' ? '/dashboard/worker'
-        : '/dashboard/client';
-
-      const redirectUrl = new URL(dashboardPath, request.url);
-      const response = NextResponse.redirect(redirectUrl);
-
-      // Ensure session cookies are set
-      if (data.session) {
-        response.cookies.set('sb-access-token', data.session.access_token, {
-          path: '/',
-          maxAge: 60 * 60 * 24 * 7, // 7 days
-        });
-        response.cookies.set('sb-refresh-token', data.session.refresh_token, {
-          path: '/',
-          maxAge: 60 * 60 * 24 * 7, // 7 days
-        });
-      }
-
-      return response;
-    }
+  if (!code) {
+    return redirect(new URL('/?error=missing_code', reqUrl));
   }
 
-  // If error, redirect to home with error
-  return NextResponse.redirect(new URL('/?error=auth_failed', request.url));
+  // Step 1 — exchange code for session (Supabase SSR sets the session cookie).
+  const supabase = await createClient();
+  const { error: exchangeError, data } = await supabase.auth.exchangeCodeForSession(code);
+  if (exchangeError || !data?.user) {
+    console.error('Auth callback exchange error:', exchangeError);
+    return redirect(new URL(`/?error=${encodeURIComponent(exchangeError?.message ?? 'auth_failed')}`, reqUrl));
+  }
+  const authUser = data.user;
+
+  // Step 2 — does the public.users row exist?
+  const { data: existing } = await supabase
+    .from('users')
+    .select('role')
+    .eq('id', authUser.id)
+    .maybeSingle();
+
+  if (existing?.role) {
+    return redirect(new URL(dashboardPathFor(existing.role as 'client' | 'worker' | 'admin'), reqUrl));
+  }
+
+  // Step 3 — first-time user. Determine cohort.
+  const requestedRole = (roleParam as SignupRole | null);
+  const cohort: SignupRole = ALLOWED_SIGNUP_ROLES.includes(requestedRole as SignupRole)
+    ? (requestedRole as SignupRole)
+    : 'worker'; // default cohort if signup came from /login/* with no role hint
+
+  // Step 4 — provision the user via the service-role client so it bypasses RLS.
+  // NOTE: we do NOT write google_token / google_refresh_token here. Those are
+  // populated only by the YouTube-grant flow.
+  const meta = (authUser.user_metadata ?? {}) as Record<string, string | undefined>;
+  const admin = serviceClient();
+  const { error: insertError } = await admin.from('users').insert({
+    id: authUser.id,
+    email: authUser.email,
+    role: cohort,
+    google_id: meta.sub ?? null,
+    full_name: meta.full_name ?? meta.name ?? null,
+    avatar_url: meta.avatar_url ?? meta.picture ?? null,
+  });
+
+  if (insertError) {
+    // Race: the row may have been created by a parallel callback. Re-fetch.
+    if (insertError.code === '23505') {
+      const { data: again } = await admin
+        .from('users')
+        .select('role')
+        .eq('id', authUser.id)
+        .maybeSingle();
+      if (again?.role) {
+        return redirect(new URL(dashboardPathFor(again.role as 'client' | 'worker' | 'admin'), reqUrl));
+      }
+    }
+    console.error('Auth callback insert error:', insertError);
+    return redirect(new URL(`/?error=${encodeURIComponent('account_create_failed')}`, reqUrl));
+  }
+
+  return redirect(new URL(dashboardPathFor(cohort), reqUrl));
 }

@@ -31,6 +31,14 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import FullLogo from '@/components/FullLogo';
+import { PRICE_PER_SUBSCRIBER } from '@/lib/constants';
+import {
+  useTelegramBackButton,
+  useTelegramMainButton,
+  hapticTap,
+  hapticBump,
+} from '@/lib/telegram/webapp';
+import type { ContractStatus, UserRole, MediaType } from '@/types/database.types';
 
 type Contract = {
   id: string;
@@ -38,23 +46,24 @@ type Contract = {
   channel_url: string;
   channel_image?: string;
   target_subscribers: number;
-  current_subscribers: number;
+  verified_count: number;
   price_per_subscriber: number;
   total_amount: number;
-  status: 'pending_payment' | 'active' | 'completed' | 'cancelled';
+  status: ContractStatus;
   created_at: string;
-  completed_tasks: number;
-  pending_tasks: number;
+  pending_count: number;
 };
 
 type Message = {
   id: string;
   contract_id: string;
+  sender_id: string;
+  sender_role: UserRole;
   message: string;
-  is_from_client: boolean;
   created_at: string;
   media_url?: string;
-  media_type?: 'image' | 'video';
+  media_type?: MediaType;
+  is_pinned?: boolean;
 };
 
 type Notification = {
@@ -81,6 +90,49 @@ export default function ClientDashboard() {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // M5: first-time onboarding + payment-proof flow
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [uploadingProof, setUploadingProof] = useState(false);
+  const ONBOARD_KEY = 'hzcr_client_onboarded';
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (window.localStorage.getItem(ONBOARD_KEY) === '1') return;
+    // Defer one tick so checkAuth runs first and we don't flash a modal at
+    // someone who's actually getting redirected away.
+    const t = setTimeout(() => setShowWelcomeModal(true), 400);
+    return () => clearTimeout(t);
+  }, []);
+
+  const dismissWelcome = () => {
+    if (typeof window !== 'undefined') window.localStorage.setItem(ONBOARD_KEY, '1');
+    setShowWelcomeModal(false);
+  };
+
+  const handleUploadProof = async (file: File) => {
+    if (!selectedCampaignForChat) return;
+    try {
+      setUploadingProof(true);
+      const { url } = await uploadToCloudinary(file);
+      const res = await fetch(`/api/contracts/${selectedCampaignForChat.id}/payment-proof`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? `Upload failed (${res.status})`);
+      }
+      showNotification('success', 'Payment proof uploaded. Awaiting admin confirmation.');
+      fetchMessages(selectedCampaignForChat.id);
+    } catch (e: any) {
+      console.error('Payment proof upload failed:', e);
+      showNotification('error', e?.message ?? 'Failed to upload payment proof');
+    } finally {
+      setUploadingProof(false);
+    }
+  };
+
   // New order form
   const [orderForm, setOrderForm] = useState({
     channel_name: '',
@@ -91,8 +143,6 @@ export default function ClientDashboard() {
 
   const router = useRouter();
   const supabase = createClient();
-
-  const PRICE_PER_SUBSCRIBER = 150;
 
   const showNotification = (type: 'success' | 'error' | 'info', message: string) => {
     const id = Math.random().toString(36).substr(2, 9);
@@ -133,8 +183,8 @@ export default function ClientDashboard() {
           table: 'messages'
         },
         (payload) => {
-          console.log('Message update:', payload);
-          if (selectedCampaignForChat && payload.new?.contract_id === selectedCampaignForChat.id) {
+          const row = payload.new as Partial<Message> | null;
+          if (selectedCampaignForChat && row?.contract_id === selectedCampaignForChat.id) {
             fetchMessages(selectedCampaignForChat.id);
           }
           fetchDashboardData();
@@ -241,23 +291,52 @@ export default function ClientDashboard() {
         return;
       }
 
+      // Belt-and-suspenders URL guard. The DB has a matching CHECK constraint
+      // (migration 0007), but catching here gives a friendlier error than a
+      // database 23514 traceback.
+      const URL_RE = /^https?:\/\/[^\s]+$/i;
+      const channelUrl = orderForm.channel_url.trim();
+      if (!URL_RE.test(channelUrl)) {
+        showNotification('error', 'Channel URL must start with http:// or https://');
+        return;
+      }
+      const channelImage = orderForm.channel_image.trim();
+      if (channelImage && !URL_RE.test(channelImage)) {
+        showNotification('error', 'Channel image must be an http(s) URL.');
+        return;
+      }
+
       const totalAmount = targetSubs * PRICE_PER_SUBSCRIBER;
 
-      const { error } = await supabase.from('contracts').insert({
-        client_id: user.id,
-        channel_name: orderForm.channel_name,
-        channel_url: orderForm.channel_url,
-        channel_image: orderForm.channel_image || null,
-        target_subscribers: targetSubs,
-        current_subscribers: 0,
-        price_per_subscriber: PRICE_PER_SUBSCRIBER,
-        total_amount: totalAmount,
-        status: 'pending_payment',
-      });
+      const { data: created, error } = await supabase
+        .from('contracts')
+        .insert({
+          client_id: user.id,
+          channel_name: orderForm.channel_name.trim(),
+          channel_url: channelUrl,
+          channel_image: channelImage || null,
+          target_subscribers: targetSubs,
+          price_per_subscriber: PRICE_PER_SUBSCRIBER,
+          total_amount: totalAmount,
+          status: 'pending_payment',
+        })
+        .select('id')
+        .single() as { data: { id: string } | null; error: any };
 
       if (error) throw error;
 
-      showNotification('success', 'Campaign created successfully!');
+      // Pin admin payment instructions to this campaign's chat.
+      // Don't block the create-order flow if pinning fails — the admin
+      // invoice email still goes out via the contract-insert trigger.
+      if (created?.id) {
+        try {
+          await fetch(`/api/contracts/${created.id}/pin-instructions`, { method: 'POST' });
+        } catch (e) {
+          console.warn('Failed to pin payment instructions:', e);
+        }
+      }
+
+      showNotification('success', 'Campaign created! Check Messages for payment instructions.');
       setShowNewOrderModal(false);
       setOrderForm({
         channel_name: '',
@@ -266,11 +345,48 @@ export default function ClientDashboard() {
         target_subscribers: '',
       });
       fetchDashboardData();
+
+      // Auto-jump to the chat for the freshly-created campaign so the user
+      // sees the pinned bank details right away.
+      if (created?.id) {
+        const newContract = {
+          id: created.id,
+          channel_name: orderForm.channel_name,
+          channel_url: orderForm.channel_url,
+          channel_image: orderForm.channel_image || undefined,
+          target_subscribers: targetSubs,
+          verified_count: 0,
+          pending_count: 0,
+          price_per_subscriber: PRICE_PER_SUBSCRIBER,
+          total_amount: totalAmount,
+          status: 'pending_payment' as const,
+          created_at: new Date().toISOString(),
+        };
+        setSelectedCampaignForChat(newContract);
+        setActiveTab('messages');
+        // Wait a tick for the message to be pinned, then load.
+        setTimeout(() => fetchMessages(created.id), 600);
+      }
     } catch (error) {
       console.error('Error creating order:', error);
       showNotification('error', 'Failed to create campaign');
     }
   };
+
+  // M11 — Telegram native UX (no-op outside Telegram):
+  //   * Welcome modal: BackButton dismisses.
+  //   * New-campaign modal: BackButton closes, MainButton submits the form.
+  useTelegramBackButton(() => { hapticTap(); dismissWelcome(); }, showWelcomeModal);
+  useTelegramBackButton(() => { hapticTap(); setShowNewOrderModal(false); }, showNewOrderModal && !showWelcomeModal);
+  useTelegramMainButton({
+    text: 'Create campaign',
+    onClick: () => { hapticBump(); handleCreateOrder(); },
+    show: showNewOrderModal,
+    disabled:
+      !orderForm.channel_name.trim()
+      || !orderForm.channel_url.trim()
+      || !parseInt(orderForm.target_subscribers || '0'),
+  });
 
   const uploadToCloudinary = async (file: File): Promise<{ url: string; type: 'image' | 'video' }> => {
     const formData = new FormData();
@@ -315,8 +431,8 @@ export default function ClientDashboard() {
       const { error } = await supabase.from('messages').insert({
         contract_id: selectedCampaignForChat.id,
         sender_id: user.id,
+        sender_role: 'client',
         message: newMessage.trim() || (mediaType === 'image' ? 'Sent an image' : 'Sent a video'),
-        is_from_client: true,
         media_url: mediaUrl,
         media_type: mediaType,
       });
@@ -363,7 +479,7 @@ export default function ClientDashboard() {
 
   const calculateProgress = (contract: Contract) => {
     if (contract.target_subscribers === 0) return 0;
-    return Math.min(100, (contract.current_subscribers / contract.target_subscribers) * 100);
+    return Math.min(100, (contract.verified_count / contract.target_subscribers) * 100);
   };
 
   const stats = {
@@ -700,7 +816,7 @@ export default function ClientDashboard() {
                           <div className="min-w-0">
                             <h3 className="font-semibold truncate">{contract.channel_name}</h3>
                             <p className="text-sm text-gray-400">
-                              {contract.current_subscribers} / {contract.target_subscribers} subscribers
+                              {contract.verified_count} / {contract.target_subscribers} subscribers
                             </p>
                           </div>
                         </div>
@@ -733,15 +849,44 @@ export default function ClientDashboard() {
               </div>
 
               {contracts.length === 0 ? (
-                <div className="bg-slate-900/80 backdrop-blur-xl border border-blue-500/20 rounded-2xl p-8 md:p-12 text-center">
-                  <FileText className="h-12 w-12 md:h-16 md:w-16 text-gray-600 mx-auto mb-4" />
-                  <p className="text-gray-400 mb-6">No campaigns yet. Create your first campaign to get started!</p>
-                  <button
-                    onClick={() => setShowNewOrderModal(true)}
-                    className="px-6 py-3 bg-cyan-500 hover:bg-cyan-600 rounded-lg transition-all cursor-pointer"
-                  >
-                    Create Campaign
-                  </button>
+                <div className="relative bg-slate-900/80 backdrop-blur-xl border border-cyan-500/30 rounded-3xl p-8 md:p-12 overflow-hidden">
+                  <div className="absolute -top-16 -right-16 h-56 w-56 rounded-full bg-cyan-500/15 blur-3xl pointer-events-none" />
+                  <div className="relative max-w-2xl mx-auto text-center">
+                    <p className="text-cyan-300 text-xs font-bold uppercase tracking-[0.25em] mb-4">Get started</p>
+                    <h2 className="text-2xl md:text-4xl font-black text-white leading-tight mb-3">
+                      No campaigns yet — let's fix that.
+                    </h2>
+                    <p className="text-white/60 mb-10 text-sm md:text-base">
+                      Four steps. We've handled steps 2 and 4 — you've got 1 and 3.
+                    </p>
+
+                    <ol className="text-left grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
+                      {[
+                        { n: 1, t: 'Create a campaign', d: 'Channel + target subscriber count.' },
+                        { n: 2, t: 'We send instructions', d: 'Bank details pinned in chat.' },
+                        { n: 3, t: 'Send proof of payment', d: 'Screenshot via the chat attach button.' },
+                        { n: 4, t: 'Real subs roll in', d: 'Verified live by the YouTube API.' },
+                      ].map((s) => (
+                        <li key={s.n} className="flex gap-3 p-4 rounded-2xl bg-slate-950/40 border border-white/5">
+                          <span className="flex-shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-400 to-blue-600 text-white font-black text-sm">
+                            {s.n}
+                          </span>
+                          <div>
+                            <p className="text-white font-semibold text-sm">{s.t}</p>
+                            <p className="text-white/60 text-xs leading-relaxed">{s.d}</p>
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+
+                    <button
+                      onClick={() => setShowNewOrderModal(true)}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 py-3 px-7 text-white font-semibold transition cursor-pointer shadow-[0_18px_40px_-12px_rgba(34,211,238,0.5)]"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Create your first campaign
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <>
@@ -797,7 +942,7 @@ export default function ClientDashboard() {
                               </td>
                               <td className="px-6 py-4">
                                 <span className="text-gray-300">
-                                  {contract.current_subscribers} / {contract.target_subscribers}
+                                  {contract.verified_count} / {contract.target_subscribers}
                                 </span>
                               </td>
                               <td className="px-6 py-4">
@@ -876,7 +1021,7 @@ export default function ClientDashboard() {
                           <div className="flex justify-between items-center">
                             <span className="text-sm text-gray-400">Targets:</span>
                             <span className="text-sm">
-                              {contract.current_subscribers} / {contract.target_subscribers}
+                              {contract.verified_count} / {contract.target_subscribers}
                             </span>
                           </div>
 
@@ -1005,26 +1150,70 @@ export default function ClientDashboard() {
                         </div>
                       </div>
 
+                      {/* Pinned admin messages — sit at the top, always visible, easy to find. */}
+                      {(() => {
+                        const pinned = messages.filter((m) => m.is_pinned);
+                        if (pinned.length === 0) return null;
+                        return (
+                          <div className="border-b border-cyan-500/20 bg-cyan-500/5 px-4 md:px-6 py-4 space-y-3">
+                            {pinned.map((msg) => (
+                              <div key={msg.id} className="flex items-start gap-3">
+                                <div className="flex-shrink-0 mt-1">
+                                  <div className="h-6 w-6 rounded-md bg-cyan-500/20 border border-cyan-500/40 grid place-items-center text-cyan-300 text-[10px]">📌</div>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-cyan-300 text-[10px] font-bold uppercase tracking-widest mb-1">Pinned · Highzcore admin</p>
+                                  <pre className="text-white/85 text-sm whitespace-pre-wrap font-sans leading-relaxed break-words">{msg.message}</pre>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
+
+                      {/* Payment-proof CTA — only while the campaign is in pending_payment. */}
+                      {selectedCampaignForChat.status === 'pending_payment' && (
+                        <div className="px-4 md:px-6 py-3 border-b border-amber-400/20 bg-amber-500/5 flex items-center justify-between gap-3">
+                          <p className="text-amber-200 text-xs md:text-sm">
+                            <span className="font-semibold">Awaiting payment confirmation.</span> Once you've transferred, upload your proof here.
+                          </p>
+                          <label className="flex-shrink-0 inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 hover:from-amber-300 hover:to-amber-500 text-slate-950 font-semibold px-3 py-2 text-xs md:text-sm cursor-pointer transition disabled:opacity-50">
+                            {uploadingProof ? 'Uploading…' : 'Upload proof'}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              disabled={uploadingProof}
+                              onChange={(e) => {
+                                const f = e.target.files?.[0];
+                                if (f) handleUploadProof(f);
+                                e.currentTarget.value = '';
+                              }}
+                            />
+                          </label>
+                        </div>
+                      )}
+
                       {/* Messages */}
                       <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
                         {loadingMessages ? (
                           <div className="flex items-center justify-center py-12">
                             <div className="animate-spin h-8 w-8 border-4 border-cyan-500 border-t-transparent rounded-full"></div>
                           </div>
-                        ) : messages.length === 0 ? (
+                        ) : messages.filter((m) => !m.is_pinned).length === 0 ? (
                           <div className="text-center py-12">
                             <p className="text-gray-400 text-sm">No messages yet. Start the conversation!</p>
                           </div>
                         ) : (
                           <>
-                            {messages.map((msg) => (
+                            {messages.filter((m) => !m.is_pinned).map((msg) => (
                             <div
                               key={msg.id}
-                              className={`flex ${msg.is_from_client ? 'justify-end' : 'justify-start'}`}
+                              className={`flex ${msg.sender_role === 'client' ? 'justify-end' : 'justify-start'}`}
                             >
                               <div
                                 className={`max-w-[85%] md:max-w-md px-3 md:px-4 py-2 md:py-3 rounded-2xl ${
-                                  msg.is_from_client
+                                  msg.sender_role === 'client'
                                     ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white'
                                     : 'bg-slate-800 text-gray-200'
                                 }`}
@@ -1142,6 +1331,95 @@ export default function ClientDashboard() {
       >
         <Plus className="h-6 w-6 text-white" />
       </button>
+
+      {/* First-time Welcome Modal */}
+      <AnimatePresence>
+        {showWelcomeModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.96, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.96, opacity: 0 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              // Cap height to the visible viewport (dvh handles mobile URL bars).
+              // Vertical scroll is allowed but the scrollbar is hidden via
+              // `.scrollbar-none`, so the modal never shifts sideways when the
+              // content grows tall enough to scroll.
+              // `overflow-x-hidden` + `break-words` keep long words / URLs from
+              // ever causing horizontal overflow.
+              style={{ maxHeight: 'calc(100dvh - 2rem)' }}
+              className="scrollbar-none relative bg-slate-900 border border-cyan-500/30 rounded-3xl p-6 md:p-8 max-w-md w-full overflow-y-auto overflow-x-hidden break-words shadow-[0_30px_80px_-20px_rgba(34,211,238,0.35)]"
+            >
+              <div className="absolute -top-10 -right-10 h-40 w-40 rounded-full bg-cyan-500/20 blur-3xl pointer-events-none" />
+              <div className="relative">
+                <p className="text-cyan-300 text-[10px] font-bold uppercase tracking-[0.25em] mb-2">Welcome to Highzcore</p>
+                <h2 className="text-2xl md:text-3xl font-black text-white mb-2 leading-tight">
+                  Let's get your channel growing.
+                </h2>
+                <p className="text-white/65 mb-6 text-sm leading-relaxed">
+                  You're a few minutes away from your first real subscribers. Here's exactly how it works on your side.
+                </p>
+
+                <ol className="space-y-4 mb-7">
+                  {[
+                    {
+                      n: 1,
+                      t: 'Create your first campaign',
+                      d: 'Tell us your YouTube channel and how many subscribers you want. Pricing is flat per-subscriber — pay once, no monthly fees.',
+                    },
+                    {
+                      n: 2,
+                      t: 'We pin payment instructions',
+                      d: 'A message with our bank name, account number, and account type lands pinned at the top of your campaign\'s chat thread. You\'ll see it the moment you open it.',
+                    },
+                    {
+                      n: 3,
+                      t: 'Send your payment proof',
+                      d: 'Transfer the campaign total, then tap the upload button in chat and share a screenshot of the receipt. We typically confirm within minutes.',
+                    },
+                    {
+                      n: 4,
+                      t: 'Real subscribers roll in',
+                      d: 'Once we confirm payment, real workers subscribe to your channel from their own Google accounts. Every subscription is verified live by the YouTube Data API and reflected in your live progress tracker.',
+                    },
+                  ].map((s) => (
+                    <li key={s.n} className="flex gap-3">
+                      <span className="flex-shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-400 to-blue-600 text-white font-black text-xs">
+                        {s.n}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-white font-semibold text-sm leading-snug">{s.t}</p>
+                        <p className="text-white/60 text-[13px] leading-relaxed mt-1">{s.d}</p>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <button
+                    onClick={() => { dismissWelcome(); setShowNewOrderModal(true); }}
+                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 py-2.5 px-4 text-white font-semibold text-sm transition cursor-pointer"
+                  >
+                    Create my first campaign
+                  </button>
+                  <button
+                    onClick={dismissWelcome}
+                    className="inline-flex items-center justify-center px-4 py-2.5 rounded-xl border border-white/10 text-white/65 hover:text-white hover:border-white/25 transition cursor-pointer text-sm"
+                  >
+                    Later
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* New Campaign Modal */}
       <AnimatePresence>

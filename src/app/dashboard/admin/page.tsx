@@ -44,13 +44,13 @@ type Contract = {
   channel_url: string;
   channel_image?: string;
   target_subscribers: number;
-  current_subscribers: number;
+  verified_count: number;
   price_per_subscriber: number;
   total_amount: number;
   status: 'pending_payment' | 'active' | 'completed' | 'cancelled';
   created_at: string;
-  completed_tasks: number;
-  pending_tasks: number;
+  pending_count: number;
+  payment_proof_url?: string | null;
 };
 
 type Withdrawal = {
@@ -81,8 +81,8 @@ type Message = {
   id: string;
   contract_id: string;
   sender_id: string;
+  sender_role: 'client' | 'worker' | 'admin';
   message: string;
-  is_from_client: boolean;
   created_at: string;
   media_url?: string;
   media_type?: 'image' | 'video';
@@ -96,9 +96,10 @@ type Completion = {
   worker_name?: string;
   channel_name?: string;
   channel_url?: string;
+  channel_image?: string;
   verified: boolean;
   payout_amount: number;
-  completed_at: string;
+  claimed_at: string;
   screenshot_url?: string;
   notes?: string;
 };
@@ -125,6 +126,7 @@ export default function AdminDashboard() {
   const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [unreadByContract, setUnreadByContract] = useState<Record<string, number>>({});
   const [selectedContractForChat, setSelectedContractForChat] = useState<Contract | null>(null);
   const [newMessage, setNewMessage] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -163,7 +165,8 @@ export default function AdminDashboard() {
     const messagesChannel = supabase
       .channel('admin-messages')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, (payload) => {
-        if (selectedContractForChat && payload.new?.contract_id === selectedContractForChat.id) {
+        const row = payload.new as Partial<Message> | null;
+        if (selectedContractForChat && row?.contract_id === selectedContractForChat.id) {
           fetchMessages(selectedContractForChat.id);
         }
         fetchDashboardData();
@@ -236,6 +239,19 @@ export default function AdminDashboard() {
         client_email: usersMap.get(c.client_id)?.email
       })) || []);
 
+      // Unread message counts per contract (client → admin direction only).
+      // Used to render the orange dot/badge on each contract in the inbox.
+      const { data: unreadRows } = await supabase
+        .from('messages')
+        .select('contract_id')
+        .eq('sender_role', 'client')
+        .eq('is_read', false);
+      const counts: Record<string, number> = {};
+      for (const row of (unreadRows ?? []) as Array<{ contract_id: string }>) {
+        counts[row.contract_id] = (counts[row.contract_id] ?? 0) + 1;
+      }
+      setUnreadByContract(counts);
+
       // Fetch withdrawals
       const { data: withdrawalsData, error: withdrawalsError } = await supabase
         .from('withdrawals')
@@ -267,7 +283,7 @@ export default function AdminDashboard() {
             channel_image
           )
         `)
-        .order('completed_at', { ascending: false });
+        .order('claimed_at', { ascending: false });
 
       if (completionsError) {
         console.error('❌ Error fetching completions:', completionsError);
@@ -344,14 +360,25 @@ export default function AdminDashboard() {
 
   const handleContractAction = async (contractId: string, newStatus: string) => {
     try {
+      // When activating, stamp activated_at so we have a real go-live time.
+      const patch: Record<string, unknown> = { status: newStatus };
+      if (newStatus === 'active') patch.activated_at = new Date().toISOString();
+
       const { error } = await supabase
         .from('contracts')
-        .update({ status: newStatus })
+        .update(patch)
         .eq('id', contractId);
 
       if (error) throw error;
 
-      showNotification('success', `Contract ${newStatus} successfully`);
+      // The status trigger from migration 0001 will broadcast the "new task"
+      // email to every worker when we hit `active` — no extra call needed.
+      showNotification(
+        'success',
+        newStatus === 'active'
+          ? 'Contract activated. Workers have been notified.'
+          : `Contract marked ${newStatus}.`
+      );
       fetchDashboardData();
     } catch (error) {
       console.error('Error updating contract:', error);
@@ -361,71 +388,63 @@ export default function AdminDashboard() {
 
   const handleWithdrawalAction = async (withdrawalId: string, newStatus: 'paid' | 'rejected') => {
     try {
-      const { error } = await supabase
-        .from('withdrawals')
-        .update({ status: newStatus })
-        .eq('id', withdrawalId);
-
-      if (error) throw error;
-
-      showNotification('success', `Withdrawal ${newStatus} successfully`);
+      if (newStatus === 'paid') {
+        // Atomic: debit wallet + write ledger entry + stamp processed_at.
+        // See mark_withdrawal_paid() in schema.sql.
+        const { data, error } = await supabase.rpc('mark_withdrawal_paid', {
+          p_withdrawal_id: withdrawalId,
+          p_admin_id: user.id,
+          p_notes: null,
+        });
+        if (error) throw error;
+        if (data?.already_paid) {
+          showNotification('info', 'Withdrawal was already paid.');
+        } else {
+          showNotification('success', `Paid ₦${(data?.amount ?? 0).toLocaleString()} to worker.`);
+        }
+      } else {
+        const { error } = await supabase
+          .from('withdrawals')
+          .update({ status: 'rejected', processed_at: new Date().toISOString(), processed_by: user.id })
+          .eq('id', withdrawalId);
+        if (error) throw error;
+        showNotification('success', 'Withdrawal rejected.');
+      }
       fetchDashboardData();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating withdrawal:', error);
-      showNotification('error', 'Failed to update withdrawal');
+      showNotification('error', error?.message ?? 'Failed to update withdrawal');
     }
   };
 
   const handleVerifyCompletion = async (completionId: string, approve: boolean) => {
     try {
       if (approve) {
-        // Get completion details to find worker and payout amount
-        const completion = completions.find(c => c.id === completionId);
-        if (!completion) {
-          showNotification('error', 'Completion not found');
-          return;
-        }
-
-        // Update completion to verified
-        const { error: completionError } = await supabase
-          .from('completions')
-          .update({
-            verified: true,
-            verified_at: new Date().toISOString(),
-            verified_by: user.id
-          })
-          .eq('id', completionId);
-
-        if (completionError) throw completionError;
-
-        // Add payout to worker's wallet
-        const { data: workerData, error: workerFetchError } = await supabase
-          .from('users')
-          .select('wallet_balance')
-          .eq('id', completion.worker_id)
-          .single();
-
-        if (workerFetchError) throw workerFetchError;
-
-        const newBalance = (workerData?.wallet_balance || 0) + completion.payout_amount;
-
-        const { error: walletError } = await supabase
-          .from('users')
-          .update({ wallet_balance: newBalance })
-          .eq('id', completion.worker_id);
-
-        if (walletError) throw walletError;
-
-        showNotification('success', `Task verified and ₦${completion.payout_amount.toLocaleString()} paid to worker!`);
-      } else {
-        // Reject - delete the completion
-        const { error } = await supabase
-          .from('completions')
-          .delete()
-          .eq('id', completionId);
+        // Atomic: verify + credit wallet + log transaction + bump contract counters.
+        // See verify_completion() in schema.sql.
+        const { data, error } = await supabase.rpc('verify_completion', {
+          p_completion_id: completionId,
+          p_admin_id: user.id,
+        });
 
         if (error) throw error;
 
+        if (data?.already_verified) {
+          showNotification('info', 'Completion was already verified');
+        } else {
+          showNotification(
+            'success',
+            `Task verified and ₦${(data?.payout_amount ?? 0).toLocaleString()} paid to worker!`
+          );
+        }
+      } else {
+        const { error } = await supabase.rpc('reject_completion', {
+          p_completion_id: completionId,
+          p_admin_id: user.id,
+          p_reason: 'Rejected from admin dashboard',
+        });
+
+        if (error) throw error;
         showNotification('success', 'Task completion rejected');
       }
 
@@ -479,8 +498,8 @@ export default function AdminDashboard() {
       const { error } = await supabase.from('messages').insert({
         contract_id: selectedContractForChat.id,
         sender_id: user.id,
+        sender_role: 'admin',
         message: newMessage.trim() || (mediaType === 'image' ? 'Sent an image' : 'Sent a video'),
-        is_from_client: false,
         media_url: mediaUrl,
         media_type: mediaType,
       });
@@ -498,11 +517,28 @@ export default function AdminDashboard() {
     }
   };
 
-  const openChatForContract = (contract: Contract) => {
+  const openChatForContract = async (contract: Contract) => {
     setSelectedContractForChat(contract);
     setActiveTab('messages');
     setShowMobileChatList(false);
     fetchMessages(contract.id);
+
+    // Optimistically zero the unread badge so the UI feels snappy. If the
+    // mark-as-read call fails the next fetchDashboardData will re-hydrate it.
+    if (unreadByContract[contract.id]) {
+      setUnreadByContract((prev) => {
+        const next = { ...prev };
+        delete next[contract.id];
+        return next;
+      });
+    }
+    // Mark all client-side messages on this contract as read.
+    await supabase
+      .from('messages')
+      .update({ is_read: true })
+      .eq('contract_id', contract.id)
+      .eq('sender_role', 'client')
+      .eq('is_read', false);
   };
 
   const viewWorkerProfile = async (workerId: string) => {
@@ -539,7 +575,7 @@ export default function AdminDashboard() {
 
   const getRoleBadgeColor = (role: string) => {
     switch (role) {
-      case 'admin': return 'text-purple-400 bg-purple-500/10';
+      case 'admin': return 'text-cyan-300 bg-cyan-500/10';
       case 'client': return 'text-cyan-400 bg-cyan-500/10';
       case 'worker': return 'text-green-400 bg-green-500/10';
       default: return 'text-gray-400 bg-gray-500/10';
@@ -548,7 +584,7 @@ export default function AdminDashboard() {
 
   const calculateProgress = (contract: Contract) => {
     if (contract.target_subscribers === 0) return 0;
-    return Math.min(100, (contract.current_subscribers / contract.target_subscribers) * 100);
+    return Math.min(100, (contract.verified_count / contract.target_subscribers) * 100);
   };
 
   const stats = {
@@ -660,7 +696,7 @@ export default function AdminDashboard() {
                     <div className="p-4 border-b border-gray-700">
                       <p className="text-sm font-semibold">{user?.full_name}</p>
                       <p className="text-xs text-gray-400">{user?.email}</p>
-                      <p className="text-xs text-purple-400 mt-1">Admin Account</p>
+                      <p className="text-xs text-cyan-300 mt-1">Admin Account</p>
                     </div>
                     <button
                       onClick={handleLogout}
@@ -879,8 +915,8 @@ export default function AdminDashboard() {
                   className="bg-slate-900/80 backdrop-blur-xl border border-blue-500/20 rounded-2xl p-4 md:p-6"
                 >
                   <div className="flex items-center justify-between mb-4">
-                    <div className="p-3 bg-purple-500/10 rounded-xl">
-                      <UsersIcon className="h-5 w-5 md:h-6 md:w-6 text-purple-400" />
+                    <div className="p-3 bg-cyan-500/10 rounded-xl">
+                      <UsersIcon className="h-5 w-5 md:h-6 md:w-6 text-cyan-300" />
                     </div>
                   </div>
                   <p className="text-gray-400 text-xs md:text-sm mb-1">Total Users</p>
@@ -1202,8 +1238,8 @@ export default function AdminDashboard() {
                                 <p className="font-semibold text-green-400">₦{completion.payout_amount.toLocaleString()}</p>
                               </td>
                               <td className="px-6 py-4">
-                                <p className="text-sm">{new Date(completion.completed_at).toLocaleDateString()}</p>
-                                <p className="text-xs text-gray-400">{new Date(completion.completed_at).toLocaleTimeString()}</p>
+                                <p className="text-sm">{new Date(completion.claimed_at).toLocaleDateString()}</p>
+                                <p className="text-xs text-gray-400">{new Date(completion.claimed_at).toLocaleTimeString()}</p>
                               </td>
                               <td className="px-6 py-4">
                                 <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
@@ -1273,7 +1309,7 @@ export default function AdminDashboard() {
                           </div>
                           <div className="flex justify-between text-sm">
                             <span className="text-gray-400">Completed:</span>
-                            <span>{new Date(completion.completed_at).toLocaleDateString()}</span>
+                            <span>{new Date(completion.claimed_at).toLocaleDateString()}</span>
                           </div>
                           <a
                             href={completion.channel_url}
@@ -1578,33 +1614,51 @@ export default function AdminDashboard() {
                     </div>
                   ) : (
                     <div>
-                      {contracts.map((contract) => (
-                        <button
-                          key={contract.id}
-                          onClick={() => {
-                            setSelectedContractForChat(contract);
-                            setShowMobileChatList(false);
-                            fetchMessages(contract.id);
-                          }}
-                          className={`w-full p-4 border-b border-gray-700/50 hover:bg-slate-800/50 transition-colors text-left cursor-pointer ${
-                            selectedContractForChat?.id === contract.id ? 'bg-slate-800/50' : ''
-                          }`}
-                        >
-                          <div className="flex items-center gap-3 mb-2">
-                            {contract.channel_image ? (
-                              <img src={contract.channel_image} alt="" className="w-10 h-10 rounded-full" />
-                            ) : (
-                              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
-                                <Play className="h-5 w-5" />
+                      {/* Sort: contracts with unread messages first, then by recency. */}
+                      {[...contracts]
+                        .sort((a, b) => (unreadByContract[b.id] ?? 0) - (unreadByContract[a.id] ?? 0))
+                        .map((contract) => {
+                          const unread = unreadByContract[contract.id] ?? 0;
+                          return (
+                            <button
+                              key={contract.id}
+                              onClick={() => openChatForContract(contract)}
+                              className={`relative w-full p-4 border-b border-gray-700/50 hover:bg-slate-800/50 transition-colors text-left cursor-pointer ${
+                                selectedContractForChat?.id === contract.id ? 'bg-slate-800/50' : ''
+                              }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="relative">
+                                  {contract.channel_image ? (
+                                    <img src={contract.channel_image} alt="" className="w-10 h-10 rounded-full" />
+                                  ) : (
+                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
+                                      <Play className="h-5 w-5" />
+                                    </div>
+                                  )}
+                                  {unread > 0 && (
+                                    <span className="absolute -top-1 -right-1 inline-flex h-5 min-w-5 px-1 items-center justify-center rounded-full bg-amber-400 text-slate-950 text-[10px] font-black ring-2 ring-slate-900">
+                                      {unread > 9 ? '9+' : unread}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <h3 className={`text-sm truncate ${unread > 0 ? 'font-bold text-white' : 'font-semibold text-white/90'}`}>
+                                      {contract.channel_name}
+                                    </h3>
+                                    {contract.status === 'pending_payment' && (
+                                      <span className="text-[9px] font-black uppercase tracking-widest text-amber-300 bg-amber-500/15 border border-amber-400/30 px-1.5 rounded-full whitespace-nowrap">
+                                        Pay·pending
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-gray-400 truncate">{contract.client_email}</p>
+                                </div>
                               </div>
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <h3 className="font-semibold text-sm truncate">{contract.channel_name}</h3>
-                              <p className="text-xs text-gray-400 truncate">{contract.client_email}</p>
-                            </div>
-                          </div>
-                        </button>
-                      ))}
+                            </button>
+                          );
+                        })}
                     </div>
                   )}
                 </div>
@@ -1622,7 +1676,7 @@ export default function AdminDashboard() {
                     <>
                       {/* Chat Header */}
                       <div className="p-4 md:p-6 border-b border-gray-700">
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-4 flex-wrap">
                           <button
                             onClick={() => setShowMobileChatList(true)}
                             className="md:hidden p-2 hover:bg-slate-800 rounded-lg cursor-pointer"
@@ -1636,18 +1690,69 @@ export default function AdminDashboard() {
                               <Play className="h-5 w-5 md:h-6 md:w-6" />
                             </div>
                           )}
-                          <div>
-                            <h2 className="text-lg md:text-xl font-bold">{selectedContractForChat.channel_name}</h2>
-                            <p className="text-xs md:text-sm text-gray-400">{selectedContractForChat.client_email}</p>
+                          <div className="flex-1 min-w-0">
+                            <h2 className="text-lg md:text-xl font-bold truncate">{selectedContractForChat.channel_name}</h2>
+                            <p className="text-xs md:text-sm text-gray-400 truncate">{selectedContractForChat.client_email}</p>
                           </div>
+                          <span className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${getStatusColor(selectedContractForChat.status)}`}>
+                            {getStatusText(selectedContractForChat.status)}
+                          </span>
                         </div>
                       </div>
+
+                      {/* Activation strip — only when contract is awaiting payment confirmation.
+                          Shows the payment-proof preview (if uploaded) and a single big
+                          "Confirm payment & activate" button. After clicking, migration 0001's
+                          trigger fires the broadcast email to every worker. */}
+                      {selectedContractForChat.status === 'pending_payment' && (
+                        <div className="px-4 md:px-6 py-4 border-b border-amber-400/30 bg-amber-500/5">
+                          <div className="flex items-start gap-3 flex-col sm:flex-row sm:items-center">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-amber-200 text-xs font-bold uppercase tracking-widest mb-1">Awaiting payment</p>
+                              <p className="text-white text-sm">
+                                Total: <span className="font-bold">₦{selectedContractForChat.total_amount.toLocaleString()}</span>
+                                {selectedContractForChat.payment_proof_url ? (
+                                  <> · <a
+                                    href={selectedContractForChat.payment_proof_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-cyan-300 hover:text-cyan-200 underline-offset-2 hover:underline"
+                                  >View payment proof ↗</a></>
+                                ) : (
+                                  <span className="text-white/50"> · Client hasn't sent proof yet</span>
+                                )}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => handleContractAction(selectedContractForChat.id, 'active')}
+                              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 hover:from-emerald-400 hover:to-emerald-600 px-5 py-2.5 text-white font-bold text-sm whitespace-nowrap transition cursor-pointer shadow-[0_10px_24px_-8px_rgba(16,185,129,0.5)]"
+                            >
+                              <Check className="h-4 w-4" strokeWidth={3} />
+                              Confirm payment & activate
+                            </button>
+                          </div>
+                          {selectedContractForChat.payment_proof_url && (
+                            <a
+                              href={selectedContractForChat.payment_proof_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="mt-3 block rounded-xl overflow-hidden border border-white/10 hover:border-cyan-400/40 transition"
+                            >
+                              <img
+                                src={selectedContractForChat.payment_proof_url}
+                                alt="Payment proof"
+                                className="w-full max-h-48 object-cover bg-slate-950"
+                              />
+                            </a>
+                          )}
+                        </div>
+                      )}
 
                       {/* Messages */}
                       <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
                         {loadingMessages ? (
                           <div className="flex items-center justify-center py-12">
-                            <div className="animate-spin h-8 w-8 border-4 border-purple-500 border-t-transparent rounded-full"></div>
+                            <div className="animate-spin h-8 w-8 border-4 border-cyan-500 border-t-transparent rounded-full"></div>
                           </div>
                         ) : messages.length === 0 ? (
                           <div className="text-center py-12">
@@ -1658,13 +1763,13 @@ export default function AdminDashboard() {
                             {messages.map((msg) => (
                             <div
                               key={msg.id}
-                              className={`flex ${msg.is_from_client ? 'justify-start' : 'justify-end'}`}
+                              className={`flex ${msg.sender_role === 'client' ? 'justify-start' : 'justify-end'}`}
                             >
                               <div
                                 className={`max-w-[85%] md:max-w-md px-3 md:px-4 py-2 md:py-3 rounded-2xl ${
-                                  msg.is_from_client
+                                  msg.sender_role === 'client'
                                     ? 'bg-slate-800 text-gray-200'
-                                    : 'bg-gradient-to-r from-purple-500 to-purple-600 text-white'
+                                    : 'bg-gradient-to-br from-cyan-500 to-blue-600 text-white'
                                 }`}
                               >
                                 {msg.media_url && (
@@ -1703,9 +1808,9 @@ export default function AdminDashboard() {
                         {selectedFile && (
                           <div className="mb-3 flex items-center gap-3 p-3 bg-slate-800 rounded-lg">
                             {selectedFile.type.startsWith('image/') ? (
-                              <ImageIcon className="h-5 w-5 text-purple-400" />
+                              <ImageIcon className="h-5 w-5 text-cyan-300" />
                             ) : (
-                              <Video className="h-5 w-5 text-purple-400" />
+                              <Video className="h-5 w-5 text-cyan-300" />
                             )}
                             <span className="text-sm text-gray-300 flex-1 truncate">{selectedFile.name}</span>
                             <button
@@ -1748,7 +1853,7 @@ export default function AdminDashboard() {
                           <button
                             onClick={handleSendMessage}
                             disabled={(!newMessage.trim() && !selectedFile) || uploading}
-                            className="px-4 md:px-6 py-2 md:py-3 bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg font-semibold hover:from-purple-600 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer"
+                            className="px-4 md:px-6 py-2 md:py-3 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-lg font-semibold hover:from-cyan-400 hover:to-blue-500 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 cursor-pointer"
                           >
                             {uploading ? (
                               <>

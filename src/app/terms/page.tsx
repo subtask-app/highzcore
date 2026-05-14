@@ -1,12 +1,16 @@
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { ArrowLeft, FileText } from 'lucide-react';
+import TelegramBack from '@/components/telegram/TelegramBack';
 
 export default function TermsOfService() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950 text-white">
       {/* Animated Background Grid */}
       <div className="fixed inset-0 bg-[linear-gradient(to_right,#8b5cf620_1px,transparent_1px),linear-gradient(to_bottom,#8b5cf620_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_110%)]" />
+
+      {/* Telegram's native top-left back-arrow (no-op outside Telegram). */}
+      <TelegramBack href="/" />
 
       {/* Header */}
       <header className="relative z-10 border-b border-purple-500/20 bg-slate-900/50 backdrop-blur-xl">

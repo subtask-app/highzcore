@@ -1,0 +1,37 @@
+# Netlify build + runtime config for Highzcore.
+# The official Next.js plugin (@netlify/plugin-nextjs) is auto-installed when
+# Netlify detects a Next.js project, so we don't list it here.
+
+[build]
+  command = "npm run build"
+  # Netlify's Next plugin overrides publish for us, but the explicit value
+  # silences a benign warning during build.
+  publish = ".next"
+
+[build.environment]
+  # Pin Node version. 20 LTS matches Vercel's default and works with our
+  # local install fix from M0.
+  NODE_VERSION = "20"
+  # Skip the npm `sharp` dedupe bug we hit during local install. The Netlify
+  # build runs in a clean container so this is precautionary.
+  NPM_FLAGS = "--no-audit --no-fund"
+
+# Bumps function timeout for the cron drains, which can take a few seconds
+# when ngrok/Telegram is slow. Free tier maxes at 26s; Pro goes to 900.
+[functions."api/cron/process-emails"]
+  timeout = 26
+
+[functions."api/cron/send-reminders"]
+  timeout = 26
+
+[functions."api/telegram/webhook"]
+  timeout = 26
+
+# Useful security defaults. The Next plugin sets sane defaults too — these
+# layer on top.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"

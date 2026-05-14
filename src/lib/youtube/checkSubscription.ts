@@ -131,8 +131,8 @@ export async function resolveHandleToChannelId(
   try {
     const cleanHandle = handle.startsWith('@') ? handle.slice(1) : handle;
 
-    const headers = useOAuth
-      ? { 'Authorization': `Bearer ${apiKeyOrToken}` }
+    const headers: Record<string, string> = useOAuth
+      ? { Authorization: `Bearer ${apiKeyOrToken}` }
       : {};
 
     const apiKeyParam = useOAuth ? '' : `&key=${apiKeyOrToken}`;
