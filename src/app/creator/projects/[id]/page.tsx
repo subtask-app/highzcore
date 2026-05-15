@@ -37,6 +37,8 @@ export default async function CreatorProjectDetailPage({ params }: PageProps) {
   const admin = serviceClient<Database>();
   const { data: project } = await admin.from('projects').select('*').eq('id', id).maybeSingle();
   if (!project) notFound();
+  // Collab projects have their own detail page that handles both parties.
+  if (project.type === 'collab') redirect(`/creator/collab/${id}`);
   if (project.creator_id !== user.id) notFound();
 
   const isInsights = project.type === 'insights';

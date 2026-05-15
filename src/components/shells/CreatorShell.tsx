@@ -1,7 +1,7 @@
 // CreatorShell — wraps every page under /creator (or wherever creator routes
 // land). Three-column desktop layout, bottom-bar on mobile.
 
-import { Home, FolderKanban, Wallet, Users, Settings, MessageSquareHeart } from 'lucide-react';
+import { Home, FolderKanban, Handshake, Users, Settings, Receipt } from 'lucide-react';
 import { type ReactNode } from 'react';
 import { ShellHeader } from './ShellHeader';
 import { ShellSidebarNav, ShellMobileBar, type NavItem } from './ShellNav';
@@ -9,16 +9,17 @@ import { ShellSidebarNav, ShellMobileBar, type NavItem } from './ShellNav';
 const CREATOR_NAV: NavItem[] = [
   { label: 'Home',      href: '/creator',           Icon: Home,             exact: true },
   { label: 'Projects',  href: '/creator/projects',  Icon: FolderKanban },
-  { label: 'Insights',  href: '/creator/insights',  Icon: MessageSquareHeart },
+  { label: 'Collab',    href: '/creator/collab',    Icon: Handshake },
   { label: 'Audience',  href: '/creator/audience',  Icon: Users },
+  { label: 'Billing',   href: '/creator/billing',   Icon: Receipt },
   { label: 'Settings',  href: '/creator/settings',  Icon: Settings },
 ];
 
 const CREATOR_NAV_MOBILE: NavItem[] = [
   { label: 'Home',      href: '/creator',           Icon: Home,             exact: true },
   { label: 'Projects',  href: '/creator/projects',  Icon: FolderKanban },
-  { label: 'Insights',  href: '/creator/insights',  Icon: MessageSquareHeart },
-  { label: 'Wallet',    href: '/creator/wallet',    Icon: Wallet },
+  { label: 'Collab',    href: '/creator/collab',    Icon: Handshake },
+  { label: 'Billing',   href: '/creator/billing',   Icon: Receipt },
   { label: 'Settings',  href: '/creator/settings',  Icon: Settings },
 ];
 
