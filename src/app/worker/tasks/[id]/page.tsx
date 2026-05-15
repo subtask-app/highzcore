@@ -6,6 +6,7 @@ import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Clock, ExternalLink } from 'lucide-react';
 import { Badge, Card, LinkButton, ProductBadge, productLabel } from '@/components/ui';
+import { ClaimTaskButton } from '@/components/worker/ClaimTaskButton';
 import { createClient } from '@/lib/supabase/server';
 import { fetchTaskWithProject, fetchWorkerContext } from '@/lib/worker/queries';
 import type { TaskStatus } from '@/lib/supabase/types';
@@ -92,11 +93,15 @@ export default async function WorkerTaskDetailPage({ params }: PageProps) {
         )}
       </Card>
 
-      {/* Action area — depends on status. Per-product completion UI lands in M6+. */}
+      {/* Action area — depends on status + product type. */}
       <Card padding="lg">
         <p className="text-sm text-fg leading-relaxed">
           {task.status === 'available' && 'Claim this task to lock it for the next 2 hours and start working.'}
-          {task.status === 'claimed'  && 'You have this task. The completion form for this product type will live here once M6–M9 ship.'}
+          {task.status === 'claimed'  && (
+            project?.type === 'insights'
+              ? 'You have this task. Watch the video and answer the questions to earn your payout.'
+              : 'You have this task. The completion form for this product type will live here once M7–M9 ship.'
+          )}
           {task.status === 'submitted' && 'Your response is in. An admin will review and approve within 24 hours; the payout moves from Pending into Available.'}
           {task.status === 'approved' && 'Approved + paid. Check your earnings.'}
           {task.status === 'rejected' && 'This task was rejected. The pending payout was returned and a new slot was opened for another worker.'}
@@ -104,11 +109,11 @@ export default async function WorkerTaskDetailPage({ params }: PageProps) {
         </p>
 
         <div className="mt-4 flex gap-2">
-          {task.status === 'available' && (
-            <LinkButton href={`/worker/tasks/${task.id}?action=claim`}>Claim task</LinkButton>
+          {task.status === 'available' && project && (
+            <ClaimTaskButton taskId={task.id} type={project.type} />
           )}
-          {task.status === 'claimed' && (
-            <LinkButton href={`/worker/tasks/${task.id}?action=submit`}>Open completion form</LinkButton>
+          {task.status === 'claimed' && project?.type === 'insights' && (
+            <LinkButton href={`/worker/tasks/${task.id}/insights`}>Open completion form</LinkButton>
           )}
           {(task.status === 'approved' || task.status === 'rejected' || task.status === 'expired') && (
             <LinkButton href="/worker/tasks" variant="secondary">Find another task</LinkButton>
