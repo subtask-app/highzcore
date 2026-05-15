@@ -1,30 +1,26 @@
 import type { MetadataRoute } from 'next';
 
-// /robots.txt — emitted by Next at build time.
-// Disallows everything behind auth + API; everything else is fair game.
+// /robots.txt — disallow auth-gated and API routes. Everything else is
+// fair game for crawlers.
 
 export default function robots(): MetadataRoute.Robots {
   const base = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://highzcore.tech').replace(/\/$/, '');
+  const disallow = [
+    '/api/',
+    '/admin/',
+    '/creator/',
+    '/worker/',
+    '/dashboard/',
+    '/auth/',
+    '/onboarding/',
+    '/post-login',
+    '/design-system',
+  ];
   return {
     rules: [
-      {
-        userAgent: '*',
-        allow: '/',
-        disallow: [
-          '/api/',
-          '/dashboard/',
-          '/auth/',
-          '/login/',
-          '/signup/',
-        ],
-      },
-      // Be explicit with the major engines — some respect googlebot rules
-      // differently than the wildcard.
-      {
-        userAgent: 'Googlebot',
-        allow: '/',
-        disallow: ['/api/', '/dashboard/', '/auth/', '/login/', '/signup/'],
-      },
+      { userAgent: '*',          allow: '/', disallow },
+      { userAgent: 'Googlebot',  allow: '/', disallow },
+      { userAgent: 'Bingbot',    allow: '/', disallow },
     ],
     sitemap: `${base}/sitemap.xml`,
     host: base,

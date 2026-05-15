@@ -28,12 +28,12 @@ const jetbrainsMono = JetBrains_Mono({
 const SITE_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://highzcore.tech';
 const SITE_NAME = process.env.NEXT_PUBLIC_SITE_NAME ?? 'Highzcore';
 const DESCRIPTION =
-  'The fastest legitimate way to reach 1,000 YouTube subscribers. Real people, real subscriptions — every one verified by YouTube\'s Data API. Pay once, no bots, no risk to monetization.';
+  'Highzcore is a creator growth platform — real people in your target audience watch your YouTube video and tell you why it\'s not landing, before you publish. Plus thumbnail testing, audience-driven promotion, and creator collabs. From $10.';
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: `${SITE_NAME} — Grow your YouTube channel with real subscribers`,
+    default: `${SITE_NAME} — Real audience feedback, before you publish`,
     template: `%s · ${SITE_NAME}`,
   },
   description: DESCRIPTION,
@@ -43,22 +43,25 @@ export const metadata: Metadata = {
   publisher: SITE_NAME,
   generator: 'Next.js',
   keywords: [
-    'YouTube growth',
-    'YouTube subscribers',
-    'buy YouTube subscribers',
-    'real YouTube subscribers',
-    'YouTube monetization',
-    '1000 YouTube subscribers',
-    'YouTube Partner Program',
-    'grow YouTube channel',
-    'earn money online',
-    'YouTube subscription tasks',
-    'side income Telegram',
-    'Telegram mini app',
+    'YouTube creator tools',
+    'YouTube audience feedback',
+    'YouTube thumbnail testing',
+    'YouTube title testing',
+    'YouTube growth tools',
+    'YouTube AB testing',
+    'YouTube focus group',
+    'creator analytics',
+    'audience research for YouTube',
+    'YouTube channel feedback',
+    'TubeBuddy alternative',
+    'VidIQ alternative',
+    'creator collab marketplace',
+    'YouTube channel collaboration',
+    'creator side income',
     'Highzcore',
   ],
   category: 'business',
-  classification: 'YouTube growth marketplace',
+  classification: 'Creator growth platform',
   referrer: 'origin-when-cross-origin',
   formatDetection: {
     email: false,
@@ -82,7 +85,7 @@ export const metadata: Metadata = {
     type: 'website',
     locale: 'en_US',
     url: SITE_URL,
-    title: `${SITE_NAME} — Grow your YouTube channel with real subscribers`,
+    title: `${SITE_NAME} — Real audience feedback, before you publish`,
     description: DESCRIPTION,
     siteName: SITE_NAME,
     images: [
@@ -90,13 +93,13 @@ export const metadata: Metadata = {
         url: '/og-image.png',
         width: 1200,
         height: 630,
-        alt: `${SITE_NAME} — real YouTube subscribers, verified by the YouTube API`,
+        alt: `${SITE_NAME} — real audience feedback for YouTube creators`,
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: `${SITE_NAME} — Grow your YouTube channel with real subscribers`,
+    title: `${SITE_NAME} — Real audience feedback, before you publish`,
     description: DESCRIPTION,
     images: ['/og-image.png'],
     creator: '@Highzcore',
