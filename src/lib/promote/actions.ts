@@ -11,6 +11,7 @@ import type {
   Database,
   TargetDemographics,
 } from '@/lib/supabase/types';
+import { enqueueChannelBroadcast } from '@/lib/notifications/queue';
 import { feeBreakdown, tierById } from './pricing';
 import { generateUtmCampaign, postUrlLooksValid } from './utm';
 
@@ -106,6 +107,12 @@ export async function createPromoteProject(formData: FormData):
       p_intent_id: intent.id,
     } as never);
     if (capErr) return { error: capErr.message };
+    await enqueueChannelBroadcast('channel.new_promote', {
+      project_id: project.id,
+      project_title: project.title,
+      per_task_usd: breakdown.perTask,
+      platforms: targetPlatforms,
+    }).catch(() => { /* non-fatal */ });
   }
 
   revalidatePath('/creator');

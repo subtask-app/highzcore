@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/server';
 import { serviceClient } from '@/lib/supabase/service';
 import type { AudienceStatus, Database, WorkerTier } from '@/lib/supabase/types';
 import { writeAudit } from './audit';
+import { enqueueNotification } from '@/lib/notifications/queue';
 
 async function requireAdmin(): Promise<{ id: string } | { error: string }> {
   const supabase = await createClient();
@@ -25,6 +26,16 @@ export async function approveTaskAction(taskId: string): Promise<{ error: string
   if ('error' in me) return me;
 
   const admin = serviceClient<Database>();
+
+  // Snapshot the task BEFORE we call the RPC — we need the worker id +
+  // project title to build the notification payload, but the RPC could
+  // change other fields.
+  const { data: snap } = await admin
+    .from('tasks')
+    .select('worker_payout_usd, assigned_to, project:projects(title, type)')
+    .eq('id', taskId)
+    .maybeSingle();
+
   const { error } = await admin.rpc('approve_task' as never, { p_task_id: taskId } as never);
   if (error) return { error: error.message };
 
@@ -34,6 +45,20 @@ export async function approveTaskAction(taskId: string): Promise<{ error: string
     entity_type: 'task',
     entity_id: taskId,
   });
+
+  if (snap?.assigned_to) {
+    type Snap = { worker_payout_usd: number; project: { title: string; type: string } | null };
+    const s = snap as unknown as Snap;
+    await enqueueNotification({
+      user_id: snap.assigned_to,
+      template_key: 'task.approved',
+      template_data: {
+        amount_usd: Number(s.worker_payout_usd ?? 0),
+        project_title: s.project?.title ?? 'Project',
+        project_type: s.project?.type ?? '',
+      },
+    });
+  }
 
   revalidatePath('/admin');
   revalidatePath('/admin/projects');
@@ -46,6 +71,12 @@ export async function rejectTaskAction(taskId: string, reason: string): Promise<
   if (!reason || reason.trim().length < 3) return { error: 'reason_required' };
 
   const admin = serviceClient<Database>();
+  const { data: snap } = await admin
+    .from('tasks')
+    .select('assigned_to, project:projects(title)')
+    .eq('id', taskId)
+    .maybeSingle();
+
   const { error } = await admin.rpc('reject_task' as never, {
     p_task_id: taskId,
     p_reason: reason.trim(),
@@ -59,6 +90,19 @@ export async function rejectTaskAction(taskId: string, reason: string): Promise<
     entity_id: taskId,
     diff: { reason: reason.trim() },
   });
+
+  if (snap?.assigned_to) {
+    type Snap = { project: { title: string } | null };
+    const s = snap as unknown as Snap;
+    await enqueueNotification({
+      user_id: snap.assigned_to,
+      template_key: 'task.rejected',
+      template_data: {
+        reason: reason.trim(),
+        project_title: s.project?.title ?? 'Project',
+      },
+    });
+  }
 
   revalidatePath('/admin');
   revalidatePath('/admin/projects');
@@ -79,6 +123,13 @@ export async function verifyAudienceAction(id: string, verifiedFollowers?: numbe
   if (verifiedFollowers !== undefined && Number.isFinite(verifiedFollowers) && verifiedFollowers >= 0) {
     patch.verified_follower_count = Math.floor(verifiedFollowers);
   }
+  // Snapshot for notification payload.
+  const { data: snap } = await admin
+    .from('worker_audiences')
+    .select('worker_id, platform, handle')
+    .eq('id', id)
+    .maybeSingle();
+
   const { error } = await admin.from('worker_audiences').update(patch).eq('id', id);
   if (error) return { error: error.message };
 
@@ -89,6 +140,14 @@ export async function verifyAudienceAction(id: string, verifiedFollowers?: numbe
     entity_id: id,
     diff: { verified_follower_count: verifiedFollowers ?? null },
   });
+
+  if (snap) {
+    await enqueueNotification({
+      user_id: snap.worker_id,
+      template_key: 'audience.verified',
+      template_data: { platform: snap.platform, handle: snap.handle },
+    });
+  }
 
   revalidatePath('/admin/workers');
   return { ok: true };
@@ -101,6 +160,12 @@ export async function rejectAudienceAction(id: string, reason: string):
   if (!reason || reason.trim().length < 3) return { error: 'reason_required' };
 
   const admin = serviceClient<Database>();
+  const { data: snap } = await admin
+    .from('worker_audiences')
+    .select('worker_id, platform, handle')
+    .eq('id', id)
+    .maybeSingle();
+
   const { error } = await admin
     .from('worker_audiences')
     .update({ status: 'rejected', rejected_reason: reason.trim() })
@@ -114,6 +179,14 @@ export async function rejectAudienceAction(id: string, reason: string):
     entity_id: id,
     diff: { reason: reason.trim() },
   });
+
+  if (snap) {
+    await enqueueNotification({
+      user_id: snap.worker_id,
+      template_key: 'audience.rejected',
+      template_data: { platform: snap.platform, handle: snap.handle, reason: reason.trim() },
+    });
+  }
 
   revalidatePath('/admin/workers');
   return { ok: true };
@@ -251,6 +324,24 @@ export async function finalizeWithdrawalAction(
     entity_id: id,
     diff: { tx_hash: txHash, provider_ref: providerRef ?? null },
   });
+
+  const { data: w } = await admin
+    .from('withdrawals')
+    .select('worker_id, amount_usd, net_usd')
+    .eq('id', id)
+    .maybeSingle();
+  if (w) {
+    await enqueueNotification({
+      user_id: w.worker_id,
+      template_key: 'withdrawal.completed',
+      template_data: {
+        amount_usd: Number(w.amount_usd),
+        net_usd: Number(w.net_usd),
+        tx_hash: txHash,
+      },
+    });
+  }
+
   revalidatePath('/admin/finance');
   return { ok: true };
 }
@@ -275,6 +366,23 @@ export async function failWithdrawalAction(id: string, reason: string):
     entity_id: id,
     diff: { reason: reason.trim() },
   });
+
+  const { data: w } = await admin
+    .from('withdrawals')
+    .select('worker_id, amount_usd')
+    .eq('id', id)
+    .maybeSingle();
+  if (w) {
+    await enqueueNotification({
+      user_id: w.worker_id,
+      template_key: 'withdrawal.failed',
+      template_data: {
+        amount_usd: Number(w.amount_usd),
+        reason: reason.trim(),
+      },
+    });
+  }
+
   revalidatePath('/admin/finance');
   return { ok: true };
 }

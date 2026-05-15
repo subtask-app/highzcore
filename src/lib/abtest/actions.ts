@@ -12,6 +12,7 @@ import type {
   Database,
   TargetDemographics,
 } from '@/lib/supabase/types';
+import { enqueueChannelBroadcast } from '@/lib/notifications/queue';
 import { feeBreakdown, tierById } from './pricing';
 
 function readJson<T>(form: FormData, key: string): T | null {
@@ -116,6 +117,12 @@ export async function createAbtestProject(formData: FormData):
       p_intent_id: intent.id,
     } as never);
     if (capErr) return { error: capErr.message };
+    await enqueueChannelBroadcast('channel.new_abtest', {
+      project_id: project.id,
+      project_title: project.title,
+      per_task_usd: breakdown.perTask,
+      kind,
+    }).catch(() => { /* non-fatal */ });
   }
 
   revalidatePath('/creator');

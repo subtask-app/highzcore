@@ -18,6 +18,7 @@ import type {
   TargetDemographics,
 } from '@/lib/supabase/types';
 import { resolveVideoMeta } from '@/lib/youtube/video-meta';
+import { enqueueChannelBroadcast } from '@/lib/notifications/queue';
 import { DEFAULT_QUESTIONS } from './questions';
 import { feeBreakdown, INSIGHTS_TIERS, tierById } from './pricing';
 
@@ -140,6 +141,13 @@ export async function createInsightsProject(formData: FormData):
     if (capErr) {
       return { error: capErr.message };
     }
+    // Announce the new study to the worker community channel.
+    await enqueueChannelBroadcast('channel.new_insights', {
+      project_id: project.id,
+      project_title: project.title,
+      per_task_usd: breakdown.perTask,
+      target_count: tier.responseCount,
+    }).catch(() => { /* non-fatal */ });
   }
 
   revalidatePath('/creator');
