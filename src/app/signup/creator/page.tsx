@@ -4,14 +4,14 @@ import { EmailPasswordForm } from '@/components/auth/EmailPasswordForm';
 import { OAuthButtons } from '@/components/auth/OAuthButtons';
 
 export const metadata = {
-  title: 'Sign up as a worker · Highzcore',
+  title: 'Sign up as a creator · Highzcore',
 };
 
-export default function SignupWorkerPage() {
+export default function SignupCreatorPage() {
   return (
     <AuthShell
-      title="Earn from your opinions"
-      description="Watch videos, answer a few questions, get paid in USDT. Withdraw whenever you cross $10."
+      title="Start growing your channel"
+      description="Real audience feedback. Real titles + thumbnails tested. Real promotion. No bots."
       backHref="/signup"
       footer={
         <>
@@ -20,13 +20,12 @@ export default function SignupWorkerPage() {
         </>
       }
     >
-      <OAuthButtons role="worker" />
+      <OAuthButtons role="creator" />
       <Divider>or with email</Divider>
-      <EmailPasswordForm mode="signup" role="worker" />
+      <EmailPasswordForm mode="signup" role="creator" />
       <p className="mt-6 text-xs text-fg-subtle leading-relaxed">
-        Workers must be 18 or older. By signing up you agree to our{' '}
-        <Link href="/terms" className="underline hover:text-fg">Terms</Link>{', '}
-        <Link href="/community-guidelines" className="underline hover:text-fg">Community Guidelines</Link>, and{' '}
+        By signing up you agree to our{' '}
+        <Link href="/terms" className="underline hover:text-fg">Terms</Link>{' '}and{' '}
         <Link href="/privacy" className="underline hover:text-fg">Privacy Policy</Link>.
       </p>
     </AuthShell>
