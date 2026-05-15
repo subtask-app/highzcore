@@ -11,6 +11,8 @@ import { createClient } from '@/lib/supabase/server';
 import { serviceClient } from '@/lib/supabase/service';
 import type { Database } from '@/lib/supabase/types';
 import { fetchInsightsProject, progressFor } from '@/lib/insights/queries';
+import { fetchAbtestProject, fetchAbtestVotes } from '@/lib/abtest/queries';
+import { AbtestResult } from '@/components/abtest/AbtestResult';
 import { cn } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
@@ -36,7 +38,10 @@ export default async function CreatorProjectDetailPage({ params }: PageProps) {
   if (project.creator_id !== user.id) notFound();
 
   const isInsights = project.type === 'insights';
+  const isAbtest = project.type === 'abtest';
   const study = isInsights ? (await fetchInsightsProject(id))?.study : null;
+  const abtest = isAbtest ? await fetchAbtestProject(id) : null;
+  const abtestVotes = isAbtest ? await fetchAbtestVotes(id) : {};
   const progress = progressFor(project);
 
   return (
@@ -150,6 +155,13 @@ export default async function CreatorProjectDetailPage({ params }: PageProps) {
                   : 'Awaiting payment to go live.'}
             </p>
           </Card>
+        </section>
+      ) : isAbtest && abtest?.test ? (
+        <section className="space-y-4">
+          <h2 className="text-xl md:text-2xl font-semibold tracking-tight">
+            {abtest.test.kind === 'thumbnail' ? 'Thumbnail' : 'Title'} test results
+          </h2>
+          <AbtestResult test={abtest.test} votesById={abtestVotes} />
         </section>
       ) : (
         <Card padding="md">

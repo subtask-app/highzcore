@@ -1483,13 +1483,100 @@ GRANT EXECUTE ON FUNCTION cancel_project(UUID, TEXT)                    TO authe
 
 
 -- =============================================================================
+-- 10. Storage — Supabase Storage buckets + RLS policies.
+-- =============================================================================
+-- Buckets:
+--   - abtest-thumbnails  Public, ≤4 thumbnails/test. Uploaded by creators
+--                        during the ABTest wizard.
+--   - audience-evidence  Private. Screenshots workers upload during the
+--                        Promote-audience verification flow.
+--   - project-uploads    Public. Reserved for future per-project assets.
+--
+-- Note: the storage extension must be enabled on the Supabase project (it
+-- is by default). Bucket creation via INSERT works in modern Supabase.
+-- =============================================================================
+
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES
+  ('abtest-thumbnails',  'abtest-thumbnails',  TRUE,  10485760,  ARRAY['image/jpeg', 'image/png', 'image/webp']),
+  ('audience-evidence',  'audience-evidence',  FALSE, 10485760,  ARRAY['image/jpeg', 'image/png', 'image/webp']),
+  ('project-uploads',    'project-uploads',    TRUE,  10485760,  NULL)
+ON CONFLICT (id) DO UPDATE
+  SET public            = EXCLUDED.public,
+      file_size_limit   = EXCLUDED.file_size_limit,
+      allowed_mime_types= EXCLUDED.allowed_mime_types;
+
+-- ─── abtest-thumbnails policies ─────────────────────────────────────────────
+-- Creators upload under their own user-id folder. Anyone can read (public
+-- bucket — workers need to see thumbnails).
+DROP POLICY IF EXISTS "abtest_thumbnails_upload" ON storage.objects;
+CREATE POLICY "abtest_thumbnails_upload"
+  ON storage.objects FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'abtest-thumbnails'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+DROP POLICY IF EXISTS "abtest_thumbnails_owner_delete" ON storage.objects;
+CREATE POLICY "abtest_thumbnails_owner_delete"
+  ON storage.objects FOR DELETE TO authenticated
+  USING (
+    bucket_id = 'abtest-thumbnails'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+DROP POLICY IF EXISTS "abtest_thumbnails_public_read" ON storage.objects;
+CREATE POLICY "abtest_thumbnails_public_read"
+  ON storage.objects FOR SELECT TO anon, authenticated
+  USING (bucket_id = 'abtest-thumbnails');
+
+-- ─── audience-evidence policies ─────────────────────────────────────────────
+-- Workers upload their own. Admins read all. Owner reads own.
+DROP POLICY IF EXISTS "audience_evidence_upload" ON storage.objects;
+CREATE POLICY "audience_evidence_upload"
+  ON storage.objects FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'audience-evidence'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+DROP POLICY IF EXISTS "audience_evidence_self_read" ON storage.objects;
+CREATE POLICY "audience_evidence_self_read"
+  ON storage.objects FOR SELECT TO authenticated
+  USING (
+    bucket_id = 'audience-evidence'
+    AND ((storage.foldername(name))[1] = auth.uid()::text OR is_admin())
+  );
+
+DROP POLICY IF EXISTS "audience_evidence_owner_delete" ON storage.objects;
+CREATE POLICY "audience_evidence_owner_delete"
+  ON storage.objects FOR DELETE TO authenticated
+  USING (
+    bucket_id = 'audience-evidence'
+    AND ((storage.foldername(name))[1] = auth.uid()::text OR is_admin())
+  );
+
+-- ─── project-uploads policies (open by default — locked down when needed) ──
+DROP POLICY IF EXISTS "project_uploads_upload" ON storage.objects;
+CREATE POLICY "project_uploads_upload"
+  ON storage.objects FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'project-uploads'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+DROP POLICY IF EXISTS "project_uploads_public_read" ON storage.objects;
+CREATE POLICY "project_uploads_public_read"
+  ON storage.objects FOR SELECT TO anon, authenticated
+  USING (bucket_id = 'project-uploads');
+
+
+-- =============================================================================
 -- Done.
 -- =============================================================================
 -- After applying:
 --   1. Run seed.sql to promote your first admin user.
---   2. Configure storage buckets (avatars, evidence_uploads) in the
---      Supabase dashboard.
---   3. Set up pg_cron jobs:
+--   2. Set up pg_cron jobs:
 --        - expire_stale_claims()                       every 5 minutes
 --        - notification processor (cron API endpoint)  every 30 seconds
 -- =============================================================================
