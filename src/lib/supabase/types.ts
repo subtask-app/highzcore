@@ -265,6 +265,20 @@ export type TaskRow = {
   updated_at: string;
 }
 
+export type TaskDisputeRow = {
+  id: string;
+  task_id: string;
+  raised_by_user_id: string;
+  raised_by_role: string;
+  reason: string;
+  evidence_urls: string[];
+  resolution: DisputeResolution;
+  resolution_notes: string | null;
+  resolved_by: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}
+
 export type PaymentIntentRow = {
   id: string;
   project_id: string;
@@ -423,6 +437,7 @@ export type Database = {
       collab_matches:     T<CollabMatchRow,     Partial<CollabMatchRow> & { project_id: string; creator_a_id: string; creator_b_id: string; kind: CollabKind; proposed_terms: string }, Partial<CollabMatchRow>>;
       boost_orders:       T<BoostOrderRow,      Partial<BoostOrderRow> & { project_id: string; kind: BoostKind; target_count: number }, Partial<BoostOrderRow>>;
       tasks:              T<TaskRow,            Partial<TaskRow> & { project_id: string; type: ProjectType; worker_payout_usd: number }, Partial<TaskRow>>;
+      task_disputes:      T<TaskDisputeRow,     Partial<TaskDisputeRow> & { task_id: string; raised_by_user_id: string; raised_by_role: string; reason: string }, Partial<TaskDisputeRow>>;
       payment_intents:    T<PaymentIntentRow,   Partial<PaymentIntentRow> & { project_id: string; user_id: string; amount_usd: number; method: PaymentMethod }, Partial<PaymentIntentRow>>;
       withdrawals:        T<WithdrawalRow,      Partial<WithdrawalRow> & { worker_id: string; amount_usd: number; fee_usd: number; net_usd: number; destination_address: string }, Partial<WithdrawalRow>>;
       ledger_entries:     T<LedgerEntryRow,     Partial<LedgerEntryRow> & { user_id: string; entry_type: LedgerEntryType; amount_usd: number; balance_after_usd: number }, Partial<LedgerEntryRow>>;
