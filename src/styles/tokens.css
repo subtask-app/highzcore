@@ -1,0 +1,212 @@
+/* =============================================================================
+   Highzcore — Design tokens
+   =============================================================================
+   Implements the token system spec'd in DESIGN.md. Loaded from globals.css.
+   Two layers:
+     1. :root              — raw values that don't change between modes
+     2. :root  + .light    — light-mode semantic mappings
+        :root.dark         — dark-mode semantic mappings
+   Semantic tokens (--bg, --fg, --surface, …) are what components use.
+   Components NEVER hard-code raw color values — always go through semantics.
+   ========================================================================== */
+
+:root {
+  /* ── Neutrals — the graphite spine ──────────────────────────────────────── */
+  --c-ink:           #06070A;
+  --c-graphite-900:  #0E1014;
+  --c-graphite-800:  #16191F;
+  --c-graphite-700:  #22262E;
+  --c-graphite-600:  #363B45;
+  --c-graphite-500:  #5A616E;
+  --c-graphite-400:  #838B98;
+  --c-graphite-300:  #B0B6C0;
+  --c-graphite-200:  #D4D8DE;
+  --c-graphite-100:  #EBEDF0;
+  --c-graphite-50:   #F5F6F8;
+  --c-paper:         #FFFFFF;
+
+  /* ── Brand — primary cyan→blue (Highzcore logo gradient family) ─────────── */
+  --c-brand-50:   #E8F8FB;
+  --c-brand-100:  #C2EEF6;
+  --c-brand-200:  #94E1EE;
+  --c-brand-300:  #5FD0E3;
+  --c-brand-400:  #2BB9D2;
+  --c-brand-500:  #0099BF;
+  --c-brand-600:  #007FA4;
+  --c-brand-700:  #006487;
+  --c-brand-800:  #004B68;
+  --c-brand-900:  #003047;
+  --c-brand-gradient: linear-gradient(135deg, #2BB9D2 0%, #1056C4 100%);
+
+  /* ── Product accents — used one at a time per product surface ───────────── */
+  --c-product-insights:  #FF8A5C;
+  --c-product-abtest:    #A584FF;
+  --c-product-promote:   #5BD68C;
+  --c-product-collab:    #FFC857;
+  --c-product-boost:     #F45B69;
+
+  /* ── Semantic states ────────────────────────────────────────────────────── */
+  --c-success:  #1FB479;
+  --c-warning:  #F4A623;
+  --c-danger:   #E5484D;
+  --c-info:     #0099BF;
+
+  /* ── Spacing scale (8pt grid, exposed in px for clarity) ────────────────── */
+  --space-0:   0;
+  --space-1:   4px;
+  --space-2:   8px;
+  --space-3:   12px;
+  --space-4:   16px;
+  --space-5:   20px;
+  --space-6:   24px;
+  --space-8:   32px;
+  --space-10:  40px;
+  --space-12:  48px;
+  --space-16:  64px;
+  --space-20:  80px;
+  --space-24:  96px;
+  --space-32:  128px;
+  --space-40:  160px;
+
+  /* ── Radii ──────────────────────────────────────────────────────────────── */
+  --r-xs:    4px;
+  --r-sm:    8px;
+  --r-md:    12px;
+  --r-lg:    16px;
+  --r-xl:    24px;
+  --r-2xl:   32px;
+  --r-full:  9999px;
+
+  /* ── Motion ─────────────────────────────────────────────────────────────── */
+  --ease-out:    cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  --dur-instant:    80ms;
+  --dur-quick:      160ms;
+  --dur-base:       240ms;
+  --dur-slow:       360ms;
+  --dur-cinematic:  520ms;
+
+  /* ── Shadows ────────────────────────────────────────────────────────────── */
+  --shadow-0: none;
+  --shadow-1: 0 1px 2px rgba(6, 7, 10, 0.08), 0 1px 1px rgba(6, 7, 10, 0.04);
+  --shadow-2: 0 4px 12px rgba(6, 7, 10, 0.12), 0 2px 4px rgba(6, 7, 10, 0.06);
+  --shadow-3: 0 16px 40px rgba(6, 7, 10, 0.18), 0 4px 12px rgba(6, 7, 10, 0.08);
+  --shadow-glow-brand: 0 0 0 1px rgba(0, 153, 191, 0.12),
+                       0 8px 32px rgba(0, 153, 191, 0.18);
+
+  /* Inner stroke used in dark mode to imply elevation since shadows are
+     barely visible against dark backgrounds. */
+  --shadow-inset-stroke: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+/* ─── Semantic mappings — light (default) ─────────────────────────────────── */
+:root,
+:root.light {
+  /* Backgrounds + surfaces */
+  --bg:                 var(--c-graphite-50);
+  --bg-elevated:        var(--c-paper);
+  --surface:            var(--c-paper);
+  --surface-hover:      var(--c-graphite-50);
+  --surface-active:     var(--c-graphite-100);
+  --surface-raised:     var(--c-paper);
+
+  /* Text */
+  --fg:                 var(--c-ink);
+  --fg-muted:           var(--c-graphite-500);
+  --fg-subtle:          var(--c-graphite-400);
+  --fg-on-brand:        var(--c-paper);
+  --fg-inverse:         var(--c-paper);
+
+  /* Borders + dividers */
+  --border:             var(--c-graphite-200);
+  --border-strong:      var(--c-graphite-300);
+
+  /* Brand interactive */
+  --brand:              var(--c-brand-500);
+  --brand-hover:        var(--c-brand-400);
+  --brand-active:       var(--c-brand-600);
+  --brand-fg:           var(--c-paper);
+  --brand-tint:         var(--c-brand-50);
+
+  /* Elevation (the shadow choices used) */
+  --elevation-1:        var(--shadow-1);
+  --elevation-2:        var(--shadow-2);
+  --elevation-3:        var(--shadow-3);
+
+  color-scheme: light;
+}
+
+/* ─── Semantic mappings — dark ────────────────────────────────────────────── */
+:root.dark {
+  --bg:                 var(--c-ink);
+  --bg-elevated:        var(--c-graphite-900);
+  --surface:            var(--c-graphite-900);
+  --surface-hover:      var(--c-graphite-800);
+  --surface-active:     var(--c-graphite-700);
+  --surface-raised:     var(--c-graphite-800);
+
+  --fg:                 var(--c-paper);
+  --fg-muted:           var(--c-graphite-400);
+  --fg-subtle:          var(--c-graphite-500);
+  --fg-on-brand:        var(--c-paper);
+  --fg-inverse:         var(--c-ink);
+
+  --border:             var(--c-graphite-600);
+  --border-strong:      var(--c-graphite-500);
+
+  --brand:              var(--c-brand-400);
+  --brand-hover:        var(--c-brand-300);
+  --brand-active:       var(--c-brand-500);
+  --brand-fg:           var(--c-ink);
+  --brand-tint:         rgba(43, 185, 210, 0.10);
+
+  /* In dark mode, shadows go subtle; inset stroke does most of the elevation work. */
+  --elevation-1:        var(--shadow-inset-stroke);
+  --elevation-2:        var(--shadow-inset-stroke), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --elevation-3:        var(--shadow-inset-stroke), 0 24px 60px rgba(0, 0, 0, 0.5);
+
+  color-scheme: dark;
+}
+
+/* ─── Auto-default to dark when user prefers it AND nothing is forced ──── */
+@media (prefers-color-scheme: dark) {
+  :root:not(.light):not(.dark) {
+    --bg:                 var(--c-ink);
+    --bg-elevated:        var(--c-graphite-900);
+    --surface:            var(--c-graphite-900);
+    --surface-hover:      var(--c-graphite-800);
+    --surface-active:     var(--c-graphite-700);
+    --surface-raised:     var(--c-graphite-800);
+
+    --fg:                 var(--c-paper);
+    --fg-muted:           var(--c-graphite-400);
+    --fg-subtle:          var(--c-graphite-500);
+    --fg-inverse:         var(--c-ink);
+
+    --border:             var(--c-graphite-600);
+    --border-strong:      var(--c-graphite-500);
+
+    --brand:              var(--c-brand-400);
+    --brand-hover:        var(--c-brand-300);
+    --brand-active:       var(--c-brand-500);
+    --brand-tint:         rgba(43, 185, 210, 0.10);
+
+    --elevation-1:        var(--shadow-inset-stroke);
+    --elevation-2:        var(--shadow-inset-stroke), 0 8px 24px rgba(0, 0, 0, 0.35);
+    --elevation-3:        var(--shadow-inset-stroke), 0 24px 60px rgba(0, 0, 0, 0.5);
+
+    color-scheme: dark;
+  }
+}
+
+/* ── Reduced-motion overrides ────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-instant:    0ms;
+    --dur-quick:      40ms;
+    --dur-base:       40ms;
+    --dur-slow:       60ms;
+    --dur-cinematic:  60ms;
+  }
+}

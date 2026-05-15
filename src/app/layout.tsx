@@ -1,22 +1,27 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
-import { Inter, Nunito } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import TelegramAutoLink from "@/components/telegram/TelegramAutoLink";
 import TelegramBridge from "@/components/telegram/TelegramBridge";
 import JsonLd from "@/components/seo/JsonLd";
 import { organizationSchema, websiteSchema } from "@/components/seo/structured-data";
+import { ThemeProvider } from "@/components/theme/ThemeProvider";
 
+// Inter is loaded as a variable font with all weights + optical sizing.
+// We use the same family for both body and display; the display utility
+// class in globals.css turns on the proper feature settings.
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
   display: 'swap',
+  axes: ['opsz'],
 });
 
-const nunito = Nunito({
-  variable: "--font-nunito",
+// Mono used for tabular numerics, IDs, and crypto addresses in dashboards.
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-jetbrains-mono",
   subsets: ["latin"],
-  weight: ['400', '600', '700', '800', '900'],
   display: 'swap',
 });
 
@@ -140,20 +145,23 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${nunito.variable} h-full antialiased`}
+      className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col font-sans">
+      <body className="min-h-full flex flex-col font-sans bg-bg text-fg">
         {/* Telegram Web App SDK — no-op outside the Telegram client. */}
         <Script src="https://telegram.org/js/telegram-web-app.js" strategy="afterInteractive" />
-        {/* Reads window.Telegram.WebApp.initData when present, links the user, redirects. */}
-        <TelegramAutoLink />
-        {/* tg.ready() + tg.expand() + theme sync; marks <html data-in-telegram>. */}
-        <TelegramBridge />
-        {/* Organization + WebSite structured data — helps Google build a rich
-            knowledge-graph card for the brand. Renders inline JSON-LD. */}
-        <JsonLd data={organizationSchema(SITE_URL, SITE_NAME)} />
-        <JsonLd data={websiteSchema(SITE_URL, SITE_NAME)} />
-        {children}
+        <ThemeProvider>
+          {/* Reads window.Telegram.WebApp.initData when present, links the user, redirects. */}
+          <TelegramAutoLink />
+          {/* tg.ready() + tg.expand() + theme sync; marks <html data-in-telegram>. */}
+          <TelegramBridge />
+          {/* Organization + WebSite structured data — helps Google build a rich
+              knowledge-graph card for the brand. Renders inline JSON-LD. */}
+          <JsonLd data={organizationSchema(SITE_URL, SITE_NAME)} />
+          <JsonLd data={websiteSchema(SITE_URL, SITE_NAME)} />
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );
