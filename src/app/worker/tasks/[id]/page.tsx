@@ -102,7 +102,9 @@ export default async function WorkerTaskDetailPage({ params }: PageProps) {
               ? 'You have this task. Watch the video and answer the questions to earn your payout.'
               : project?.type === 'abtest'
                 ? "You have this task. Pick the variant you'd click first."
-                : 'You have this task. The completion form for this product type will live here once M8–M9 ship.'
+                : project?.type === 'promote'
+                  ? 'You have this task. Share the video to your audience and submit the post URL.'
+                  : 'You have this task. The completion form for this product type will live here once M9 ships.'
           )}
           {task.status === 'submitted' && 'Your response is in. An admin will review and approve within 24 hours; the payout moves from Pending into Available.'}
           {task.status === 'approved' && 'Approved + paid. Check your earnings.'}
@@ -119,6 +121,9 @@ export default async function WorkerTaskDetailPage({ params }: PageProps) {
           )}
           {task.status === 'claimed' && project?.type === 'abtest' && (
             <LinkButton href={`/worker/tasks/${task.id}/abtest`}>Open voting screen</LinkButton>
+          )}
+          {task.status === 'claimed' && project?.type === 'promote' && (
+            <LinkButton href={`/worker/tasks/${task.id}/promote`}>Open share form</LinkButton>
           )}
           {(task.status === 'approved' || task.status === 'rejected' || task.status === 'expired') && (
             <LinkButton href="/worker/tasks" variant="secondary">Find another task</LinkButton>

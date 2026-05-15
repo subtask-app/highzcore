@@ -13,6 +13,8 @@ import type { Database } from '@/lib/supabase/types';
 import { fetchInsightsProject, progressFor } from '@/lib/insights/queries';
 import { fetchAbtestProject, fetchAbtestVotes } from '@/lib/abtest/queries';
 import { AbtestResult } from '@/components/abtest/AbtestResult';
+import { fetchPromoteProject, fetchPromoteShares } from '@/lib/promote/queries';
+import { PromoteResult } from '@/components/promote/PromoteResult';
 import { cn } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
@@ -39,9 +41,12 @@ export default async function CreatorProjectDetailPage({ params }: PageProps) {
 
   const isInsights = project.type === 'insights';
   const isAbtest = project.type === 'abtest';
+  const isPromote = project.type === 'promote';
   const study = isInsights ? (await fetchInsightsProject(id))?.study : null;
   const abtest = isAbtest ? await fetchAbtestProject(id) : null;
   const abtestVotes = isAbtest ? await fetchAbtestVotes(id) : {};
+  const promote = isPromote ? await fetchPromoteProject(id) : null;
+  const promoteShares = isPromote ? await fetchPromoteShares(id) : [];
   const progress = progressFor(project);
 
   return (
@@ -162,6 +167,15 @@ export default async function CreatorProjectDetailPage({ params }: PageProps) {
             {abtest.test.kind === 'thumbnail' ? 'Thumbnail' : 'Title'} test results
           </h2>
           <AbtestResult test={abtest.test} votesById={abtestVotes} />
+        </section>
+      ) : isPromote && promote?.campaign ? (
+        <section className="space-y-4">
+          <h2 className="text-xl md:text-2xl font-semibold tracking-tight">Campaign progress</h2>
+          <PromoteResult
+            campaign={promote.campaign}
+            shares={promoteShares}
+            targetShareCount={project.target_response_count ?? 0}
+          />
         </section>
       ) : (
         <Card padding="md">

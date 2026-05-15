@@ -30,6 +30,7 @@ export function ClaimTaskButton({ taskId, type }: Props) {
       const next =
         type === 'insights' ? `/worker/tasks/${taskId}/insights`
         : type === 'abtest' ? `/worker/tasks/${taskId}/abtest`
+        : type === 'promote' ? `/worker/tasks/${taskId}/promote`
         : `/worker/tasks/${taskId}`;
       router.push(next);
       router.refresh();
