@@ -1,177 +1,115 @@
-# Highzcore - YouTube Growth Marketplace
+# Highzcore
 
-A two-sided marketplace connecting YouTube content creators in Nigeria with workers who help them reach the 1,000 subscriber threshold needed for monetization.
+A creator-growth platform for YouTube creators. Real audiences, honest
+data, real growth. Built on a Telegram-native + web stack.
 
-## 🎯 What Is Highzcore?
+Four products, one platform:
 
-**For Creators**: Pay to get real subscribers from real people to reach YouTube's monetization requirement faster.
+- **Audience Insights** — real people in your target demographic watch your
+  video and answer structured questions before you publish.
+- **Thumbnail & Title A/B Testing** — click-test 2–4 variants with statistical
+  confidence in under an hour.
+- **Promote** — workers with verified follower counts share your video to
+  their real audiences on 7 platforms, UTM-tracked.
+- **Collab Matchmaking** — creator-to-creator partnerships with two-sided
+  escrow.
 
-**For Workers**: Earn ₦120 per task by subscribing to YouTube channels with your Google account.
+The web app and the Telegram mini-app share the same backend, the same
+account, and the same dashboards.
 
-**For the Platform**: Take a 20% fee from each transaction to maintain the platform and provide support.
+## Stack
 
-## 🚀 Quick Start
+- **Next.js 16.2.4** (App Router, Turbopack, Server Actions)
+- **TypeScript 5** strict mode
+- **Tailwind v4**
+- **Supabase** — Postgres 15 + Auth + Storage + Row-Level Security
+- **grammy** — Telegram bot framework
+- **Framer Motion** — micro-animations + scroll-driven reveals
+- **lucide-react** — icons
+- **Netlify** — deploy target
 
-### Prerequisites
-
-- Node.js 18+ installed
-- A Supabase account
-- A Google Cloud account (for YouTube API)
-- A Resend account (for emails)
-
-### Installation
-
-1. **Clone and install dependencies**
-   ```bash
-   cd highzcore-app
-   npm install
-   ```
-
-2. **Set up environment variables**
-   ```bash
-   cp .env.local.example .env.local
-   # Edit .env.local with your actual credentials
-   ```
-
-3. **Set up Supabase**
-   - Create a new Supabase project
-   - Run the SQL from `supabase-schema.sql` in the SQL Editor
-   - Copy your project URL and keys to `.env.local`
-
-4. **Set up Google Cloud**
-   - See detailed instructions in `SETUP_GUIDE.md` Step 2
-   - Enable YouTube Data API v3
-   - Create OAuth credentials
-   - Add credentials to `.env.local`
-
-5. **Run the development server**
-   ```bash
-   npm run dev
-   ```
-
-6. **Open your browser**
-   - Navigate to [http://localhost:3000](http://localhost:3000)
-
-For detailed setup instructions, see **[SETUP_GUIDE.md](./SETUP_GUIDE.md)**
-
-## 📖 Documentation
-
-- **[SETUP_GUIDE.md](./SETUP_GUIDE.md)** - Complete setup instructions
-- **[PROJECT_STATUS.md](./PROJECT_STATUS.md)** - Current progress and next steps
-- **SubTask Business Overview.docx** - Business model explained
-- **SubTask Business Documentation.docx** - Technical specifications
-
-## 🏗️ Current Status
-
-**✅ Completed (30%)**:
-- Next.js project initialized
-- Database schema designed
-- Supabase integration configured
-- Landing page with pricing calculator
-- Type definitions and utilities
-
-**🚧 In Progress**:
-- Authentication system
-- Worker dashboard
-- Client dashboard
-- Admin dashboard
-- YouTube API integration
-
-See [PROJECT_STATUS.md](./PROJECT_STATUS.md) for full details.
-
-## 💡 Features
-
-### For Creators
-- Choose from preset packages or custom orders
-- Track real-time subscriber progress
-- Transparent pricing (₦150 per subscriber)
-- Manual payment with bank transfer
-- Email notifications
-
-### For Workers
-- Sign in with Google account
-- Browse available tasks
-- Earn ₦120 per task instantly
-- Withdraw to Nigerian bank account
-- No special skills required
-
-### For Admins
-- Manual payment confirmation
-- Automated task distribution
-- Withdrawal processing queue
-- User management
-- Analytics dashboard
-
-## 🛠️ Tech Stack
-
-- **Framework**: Next.js 16 (App Router)
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS
-- **Database**: Supabase (PostgreSQL)
-- **Authentication**: Supabase Auth + Google OAuth
-- **API**: YouTube Data API v3
-- **Email**: Resend
-- **Deployment**: Vercel
-
-## 📁 Project Structure
+## Project structure
 
 ```
-subtask-app/
-├── src/
-│   ├── app/                    # Next.js App Router pages
-│   │   ├── page.tsx            # Landing page ✓
-│   │   ├── login/              # (To be built)
-│   │   ├── signup/             # (To be built)
-│   │   ├── dashboard/          # (To be built)
-│   │   ├── admin/              # (To be built)
-│   │   └── api/                # API routes (To be built)
-│   ├── components/             # Reusable React components
-│   ├── lib/                    # Utility functions
-│   │   ├── supabase/           # Supabase clients ✓
-│   │   └── utils.ts            # Helper functions ✓
-│   ├── types/                  # TypeScript type definitions ✓
-│   └── middleware.ts           # Auth middleware ✓
-├── public/                     # Static files
-├── supabase-schema.sql         # Database schema ✓
-└── SETUP_GUIDE.md              # Setup instructions ✓
+src/
+├── app/                   # Next.js App Router pages
+│   ├── (marketing)        # Public marketing routes (/, /products/*, /pricing, etc.)
+│   ├── (auth flow)        # /signup, /login, /onboarding, /post-login
+│   ├── (legal/trust)      # /privacy, /terms, /refund-policy, …
+│   ├── creator/           # Authed creator dashboard
+│   ├── worker/            # Authed worker dashboard
+│   ├── admin/             # Admin dashboard
+│   ├── api/               # Server routes (telegram webhook, cron, verify-channel)
+│   └── auth/              # OAuth callback + password reset
+├── components/
+│   ├── marketing/         # Public-page primitives (Header, Footer, Hero, etc.)
+│   ├── shells/            # Authed-page layouts (Creator / Worker / Admin)
+│   ├── ui/                # Shared design-system primitives (Button, Card, …)
+│   ├── insights/          # Audience Insights product UI
+│   ├── abtest/            # AB Test product UI
+│   ├── promote/           # Promote product UI
+│   ├── collab/            # Collab product UI
+│   ├── admin/             # Admin-specific UI
+│   ├── auth/              # Sign-up / login forms
+│   ├── onboarding/        # Wizard primitives
+│   ├── creator/           # Creator-side shared bits
+│   ├── worker/            # Worker-side shared bits
+│   ├── brand/             # Logo
+│   ├── seo/               # JsonLd + structured-data builders
+│   ├── theme/             # Theme provider + toggles
+│   └── telegram/          # Mini-app helpers (auto-link, signup button)
+└── lib/
+    ├── supabase/          # Browser + server + service clients + Database types
+    ├── auth/              # Auth server actions
+    ├── creator/           # Creator queries
+    ├── worker/            # Worker queries + actions
+    ├── admin/             # Admin queries + actions + audit
+    ├── insights/          # Insights pricing + actions + queries
+    ├── abtest/            # AB test pricing + statistics + actions
+    ├── promote/           # Promote pricing + UTM + actions
+    ├── collab/            # Collab pricing + actions + queries
+    ├── notifications/     # Template render + queue + dispatch
+    ├── telegram/          # Bot + webapp helpers + initData verify
+    ├── youtube/           # Channel + video metadata helpers
+    ├── storage/           # Supabase Storage upload helper
+    ├── onboarding/        # Shared option catalogs
+    └── motion.ts, utils.ts
 ```
 
-## 🔐 Security
+## Local dev
 
-- All subscriptions verified via official YouTube API
-- Row-level security (RLS) enabled on all database tables
-- Google OAuth for authentication
-- Encrypted OAuth tokens in database
-- Manual payment confirmation to prevent fraud
+```bash
+npm install
+cp .env.example .env.local    # then fill in the values per LAUNCH.md §3
+npm run dev                   # http://localhost:3000
+```
 
-## 💰 Pricing
+Typecheck + build:
 
-| Package | Subscribers | Price |
-|---------|-------------|-------|
-| Starter | 100 | ₦15,000 |
-| Growth | 500 | ₦75,000 |
-| Standard | 1,000 | ₦150,000 |
-| Premium | 2,000 | ₦280,000 |
-| Custom | Variable | ₦150/subscriber |
+```bash
+./node_modules/.bin/tsc --noEmit
+npm run build
+```
 
-**Worker Rate**: ₦120 per task
-**Platform Fee**: 20%
+## Deploying
 
-## 📝 License
+See [`LAUNCH.md`](./LAUNCH.md) for the full runbook (Supabase setup, schema
+apply, bot setup, env vars, smoke tests).
 
-Proprietary - All rights reserved
+## Reference docs
 
-## 🤝 Contributing
+- [`BRAND.md`](./BRAND.md) — voice, tone, positioning, naming. Read before
+  writing copy.
+- [`DESIGN.md`](./DESIGN.md) — Apple-inspired design language: tokens,
+  type, motion, components. Read before touching UI.
+- [`schema.sql`](./schema.sql) — authoritative database schema. Keep
+  `src/lib/supabase/types.ts` in sync when you change it.
+- [`LAUNCH.md`](./LAUNCH.md) — deployment runbook.
 
-This is a private project. Contact the owner for collaboration opportunities.
+## Compliance posture
 
-## 📧 Support
-
-For setup help: See `SETUP_GUIDE.md`
-For business questions: See business documentation files
-For bugs or issues: Contact the development team
-
----
-
-**Built with ❤️ for Nigerian content creators and earners**
-# highzcore
+Highzcore does not sell subscribers, views, likes, or comments. We do not
+touch your YouTube account. Every product we ship works because YouTube
+would approve, not because they wouldn't notice. See
+[`/compare/sub-services`](./src/app/compare/sub-services/page.tsx) for the
+full rationale.
