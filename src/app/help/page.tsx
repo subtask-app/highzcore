@@ -55,6 +55,7 @@ export default function HelpPage() {
       ])} />
 
       <Hero
+        scene="calm"
         eyebrow="Help center"
         title={<>Got a question?<br /><span className="text-fg-muted">Browse the answers.</span></>}
         description={

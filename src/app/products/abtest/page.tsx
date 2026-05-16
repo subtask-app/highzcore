@@ -65,6 +65,7 @@ export default function AbtestProductPage() {
       ])} />
 
       <Hero
+        scene="abtest"
         eyebrow="Thumbnail & Title Testing"
         title={<>Pick the winner.<br /><span className="text-fg-muted">Before you publish.</span></>}
         description={<>Click-test up to 4 thumbnails or titles against your target audience. Statistical winner in under an hour.</>}

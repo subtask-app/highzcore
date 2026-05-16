@@ -65,6 +65,7 @@ export default function PromoteProductPage() {
       ])} />
 
       <Hero
+        scene="promote"
         eyebrow="Promote"
         title={<>Reach real audiences.<br /><span className="text-fg-muted">Not bots.</span></>}
         description={<>Workers with verified follower counts share your video to their actual audiences on 7 platforms. UTM-tracked in your YouTube Studio.</>}

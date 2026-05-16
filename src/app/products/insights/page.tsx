@@ -65,6 +65,7 @@ export default function InsightsProductPage() {
       ])} />
 
       <Hero
+        scene="insights"
         eyebrow="Audience Insights"
         title={<>Find out what your<br /><span className="text-fg-muted">audience really thinks.</span></>}
         description={

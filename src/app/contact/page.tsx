@@ -23,6 +23,7 @@ export default function ContactPage() {
       ])} />
 
       <Hero
+        scene="calm"
         eyebrow="Contact"
         title={<>Get in touch.</>}
         description="The fastest path is Telegram — a human usually replies within an hour during the day. Email works too if you prefer."

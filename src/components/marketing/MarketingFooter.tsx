@@ -1,7 +1,10 @@
-// Full marketing footer with link columns per the spec in M12 plan.
+// Full marketing footer — link columns + country chips + an ambient
+// gradient backdrop that lines up with the 3D system used on hero +
+// section areas.
 
 import Link from 'next/link';
 import Logo from '@/components/brand/Logo';
+import { AmbientBackdrop } from '@/components/marketing3d/AmbientBackdrop';
 
 interface Column {
   title: string;
@@ -49,13 +52,9 @@ const COLUMNS: Column[] = [
     links: [
       { href: '/terms',                       label: 'Terms of Service' },
       { href: '/privacy',                     label: 'Privacy Policy' },
-      { href: '/cookie-policy',               label: 'Cookie Policy' },
       { href: '/refund-policy',               label: 'Refund Policy' },
       { href: '/acceptable-use',              label: 'Acceptable Use' },
       { href: '/community-guidelines',        label: 'Community Guidelines' },
-      { href: '/dmca',                        label: 'DMCA' },
-      { href: '/anti-fraud',                  label: 'Anti-Fraud Policy' },
-      { href: '/accessibility',               label: 'Accessibility' },
     ],
   },
 ];
@@ -71,8 +70,9 @@ const COUNTRY_LINKS: { href: string; label: string }[] = [
 
 export function MarketingFooter() {
   return (
-    <footer className="border-t border-border bg-bg-elevated">
-      <div className="mx-auto max-w-[1440px] px-4 md:px-8 py-12 md:py-16">
+    <footer className="relative isolate border-t border-border bg-bg-elevated overflow-hidden">
+      <AmbientBackdrop variant="subtle" />
+      <div className="relative z-10 mx-auto max-w-[1440px] px-4 md:px-8 py-12 md:py-16">
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-8">
           {COLUMNS.map((col) => (
             <div key={col.title}>
@@ -80,7 +80,13 @@ export function MarketingFooter() {
               <ul className="space-y-2">
                 {col.links.map((l) => (
                   <li key={l.href}>
-                    <Link href={l.href} className="text-sm text-fg-muted hover:text-fg">
+                    <Link
+                      href={l.href}
+                      className="inline-block text-sm text-fg-muted hover:text-fg transition-colors relative
+                                 after:absolute after:inset-x-0 after:-bottom-0.5 after:h-px after:bg-brand
+                                 after:scale-x-0 after:origin-left hover:after:scale-x-100
+                                 after:transition-transform after:duration-300"
+                    >
                       {l.label}
                     </Link>
                   </li>
@@ -97,7 +103,7 @@ export function MarketingFooter() {
               <Link
                 key={c.href}
                 href={c.href}
-                className="inline-flex items-center h-8 px-3 rounded-full border border-border bg-surface text-sm font-medium text-fg-muted hover:text-fg hover:bg-surface-hover"
+                className="inline-flex items-center h-8 px-3 rounded-full border border-border bg-surface/60 backdrop-blur text-sm font-medium text-fg-muted hover:text-fg hover:bg-surface-hover transition-colors"
               >
                 {c.label}
               </Link>

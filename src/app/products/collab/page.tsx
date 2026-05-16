@@ -64,6 +64,7 @@ export default function CollabProductPage() {
       ])} />
 
       <Hero
+        scene="collab"
         eyebrow="Collab Matchmaking"
         title={<>Cross-promote.<br /><span className="text-fg-muted">Without the ghosting.</span></>}
         description={<>Find creators in your niche for collabs, lock terms with two-sided escrow, and grow each other.</>}
