@@ -95,7 +95,7 @@ export function Hero3D({
 
   return (
     <section className={cn(
-      'relative isolate overflow-hidden px-4 md:px-8 pt-24 md:pt-40 pb-20 md:pb-32',
+      'relative isolate overflow-hidden px-4 md:px-8 pt-14 md:pt-32 pb-12 md:pb-28',
       className,
     )}>
       {/* 3D backdrop. Absolutely positioned, pointer-events:none in Stage. */}
@@ -134,14 +134,14 @@ export function Hero3D({
         )}
         <motion.h1
           variants={fadeUp}
-          className="mt-4 font-display text-5xl md:text-7xl lg:text-[96px] font-extrabold tracking-[-0.035em] leading-[1.02] text-fg"
+          className="mt-4 font-display text-[40px] sm:text-5xl md:text-7xl lg:text-[96px] font-extrabold tracking-[-0.035em] leading-[1.04] md:leading-[1.02] text-fg"
         >
           {title}
         </motion.h1>
         {description && (
           <motion.div
             variants={fadeUp}
-            className="mx-auto mt-6 max-w-2xl text-lg md:text-xl text-fg-muted leading-relaxed"
+            className="mx-auto mt-5 md:mt-6 max-w-2xl text-base sm:text-lg md:text-xl text-fg-muted leading-relaxed"
           >
             {description}
           </motion.div>

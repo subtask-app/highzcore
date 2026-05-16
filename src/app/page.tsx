@@ -6,6 +6,7 @@ import { ArrowRight, BarChart3, Handshake, Layers, LayoutGrid, MessageSquareHear
 import { MarketingLayout } from '@/components/marketing/MarketingLayout';
 import { Hero, Reveal, SectionHeading } from '@/components/marketing/sections';
 import { FaqBlock } from '@/components/marketing/FaqBlock';
+import { PremiumCard } from '@/components/marketing/PremiumCard';
 import { Card, LinkButton, ProductBadge, productLabel } from '@/components/ui';
 import JsonLd from '@/components/seo/JsonLd';
 import { faqSchema, organizationSchema, websiteSchema } from '@/components/seo/structured-data';
@@ -97,18 +98,20 @@ export default function HomePage() {
         }
       />
 
-      <Reveal className="!py-12 md:!py-16">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-[1100px] mx-auto">
+      <Reveal className="!py-8 md:!py-16" ambient={false}>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 max-w-[1100px] mx-auto">
           {[
             { v: '$10',  l: 'Thumbnail tests from' },
             { v: '<24h', l: 'Typical turnaround' },
             { v: '6+',   l: 'Worker countries' },
             { v: '4',    l: 'Products, one platform' },
           ].map((s) => (
-            <Card key={s.l} padding="md" className="text-center">
-              <p className="font-mono tabular text-4xl md:text-5xl font-extrabold tracking-tight text-fg">{s.v}</p>
-              <p className="mt-1 text-sm text-fg-muted">{s.l}</p>
-            </Card>
+            <PremiumCard key={s.l} className="h-full" spotlight={false}>
+              <div className="px-4 py-5 md:p-6 text-center">
+                <p className="font-mono tabular text-3xl md:text-5xl font-extrabold tracking-tight text-fg">{s.v}</p>
+                <p className="mt-1 text-xs md:text-sm text-fg-muted">{s.l}</p>
+              </div>
+            </PremiumCard>
           ))}
         </div>
       </Reveal>
@@ -119,31 +122,39 @@ export default function HomePage() {
           title={<>Built for creators<br />who hate guessing.</>}
           description="Every product hooks into the same worker pool — switch between products without switching tools."
         />
-        <div className="mt-12 grid md:grid-cols-2 gap-4">
-          {PRODUCTS.map((p) => (
-            <Link key={p.product} href={`/products/${p.product}`} className="block">
-              <Card variant="interactive" padding="lg" className="h-full flex flex-col">
-                <div className="flex items-start gap-4">
-                  <ProductBadge product={p.product} size="lg" />
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-2xl font-semibold tracking-tight text-fg">{productLabel(p.product)}</h3>
-                    <p className="mt-2 text-base text-fg-muted leading-relaxed">{p.pitch}</p>
+        <div className="mt-8 md:mt-12 grid md:grid-cols-2 gap-4">
+          {PRODUCTS.map((p) => {
+            const accent =
+              p.product === 'insights' ? '#ff8a5c' :
+              p.product === 'abtest'   ? '#a584ff' :
+              p.product === 'promote'  ? '#5bd68c' :
+              p.product === 'collab'   ? '#ffc857' :
+              'var(--c-brand)';
+            return (
+              <PremiumCard key={p.product} href={`/products/${p.product}`} accent={accent} className="h-full">
+                <div className="p-5 md:p-8 flex flex-col h-full">
+                  <div className="flex items-start gap-4">
+                    <ProductBadge product={p.product} size="lg" />
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-xl md:text-2xl font-semibold tracking-tight text-fg">{productLabel(p.product)}</h3>
+                      <p className="mt-2 text-sm md:text-base text-fg-muted leading-relaxed">{p.pitch}</p>
+                    </div>
                   </div>
+                  <ul className="mt-5 md:mt-6 space-y-1.5">
+                    {p.bullets.map((b) => (
+                      <li key={b} className="flex items-center gap-2 text-sm text-fg-muted">
+                        <span className="inline-block h-1 w-1 rounded-full" style={{ backgroundColor: accent }} />
+                        {b}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-5 md:mt-6 text-sm font-semibold inline-flex items-center gap-1 transition-transform group-hover:translate-x-0.5" style={{ color: accent }}>
+                    Learn more <ArrowRight className="h-3.5 w-3.5" />
+                  </p>
                 </div>
-                <ul className="mt-6 space-y-1.5">
-                  {p.bullets.map((b) => (
-                    <li key={b} className="flex items-center gap-2 text-sm text-fg-muted">
-                      <span className="inline-block h-1 w-1 rounded-full bg-brand" />
-                      {b}
-                    </li>
-                  ))}
-                </ul>
-                <p className="mt-6 text-sm font-semibold text-brand inline-flex items-center gap-1">
-                  Learn more <ArrowRight className="h-3.5 w-3.5" />
-                </p>
-              </Card>
-            </Link>
-          ))}
+              </PremiumCard>
+            );
+          })}
         </div>
       </Reveal>
 

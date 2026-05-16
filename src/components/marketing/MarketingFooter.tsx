@@ -73,37 +73,48 @@ export function MarketingFooter() {
     <footer className="relative isolate border-t border-border bg-bg-elevated overflow-hidden">
       <AmbientBackdrop variant="subtle" />
       <div className="relative z-10 mx-auto max-w-[1440px] px-4 md:px-8 py-12 md:py-16">
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-8">
-          {COLUMNS.map((col) => (
-            <div key={col.title}>
-              <p className="text-xs uppercase tracking-[0.18em] font-semibold text-fg-subtle mb-3">{col.title}</p>
-              <ul className="space-y-2">
-                {col.links.map((l) => (
-                  <li key={l.href}>
-                    <Link
-                      href={l.href}
-                      className="inline-block text-sm text-fg-muted hover:text-fg transition-colors relative
-                                 after:absolute after:inset-x-0 after:-bottom-0.5 after:h-px after:bg-brand
-                                 after:scale-x-0 after:origin-left hover:after:scale-x-100
-                                 after:transition-transform after:duration-300"
-                    >
-                      {l.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+        {/* Brand block — full width on mobile, sits to the left of the grid on desktop */}
+        <div className="grid lg:grid-cols-[260px_1fr] gap-10 lg:gap-12">
+          <div className="space-y-4">
+            <Logo size="md" href="/" />
+            <p className="text-sm text-fg-muted leading-relaxed max-w-xs">
+              Real audiences. Honest data. Real growth. A creator growth platform for the
+              0–100k YouTube zone.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-8 sm:gap-6">
+            {COLUMNS.map((col) => (
+              <div key={col.title}>
+                <p className="text-xs uppercase tracking-[0.18em] font-semibold text-fg-subtle mb-3">{col.title}</p>
+                <ul className="space-y-2">
+                  {col.links.map((l) => (
+                    <li key={l.href}>
+                      <Link
+                        href={l.href}
+                        className="inline-block text-sm text-fg-muted hover:text-fg transition-colors relative
+                                   after:absolute after:inset-x-0 after:-bottom-0.5 after:h-px after:bg-brand
+                                   after:scale-x-0 after:origin-left hover:after:scale-x-100
+                                   after:transition-transform after:duration-300"
+                      >
+                        {l.label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="mt-12 pt-6 border-t border-border">
           <p className="text-xs uppercase tracking-[0.18em] font-semibold text-fg-subtle mb-3">Countries we serve</p>
-          <div className="flex flex-wrap gap-3">
+          <div className="-mx-1 px-1 flex flex-nowrap gap-2 overflow-x-auto sm:flex-wrap sm:overflow-visible sm:gap-3 scrollbar-none">
             {COUNTRY_LINKS.map((c) => (
               <Link
                 key={c.href}
                 href={c.href}
-                className="inline-flex items-center h-8 px-3 rounded-full border border-border bg-surface/60 backdrop-blur text-sm font-medium text-fg-muted hover:text-fg hover:bg-surface-hover transition-colors"
+                className="shrink-0 inline-flex items-center h-8 px-3 rounded-full border border-border bg-surface/60 backdrop-blur text-sm font-medium text-fg-muted hover:text-fg hover:bg-surface-hover transition-colors"
               >
                 {c.label}
               </Link>
@@ -111,16 +122,9 @@ export function MarketingFooter() {
           </div>
         </div>
 
-        <div className="mt-12 pt-6 border-t border-border flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-3">
-            <Logo size="sm" href={null} />
-            <span className="text-sm text-fg-muted">
-              Real audiences. Honest data. Real growth.
-            </span>
-          </div>
-          <p className="text-xs text-fg-subtle">
-            © {new Date().getFullYear()} Highzcore. Built for creators worldwide.
-          </p>
+        <div className="mt-10 pt-6 border-t border-border flex items-center justify-between gap-4 flex-wrap text-xs text-fg-subtle">
+          <span>© {new Date().getFullYear()} Highzcore. Built for creators worldwide.</span>
+          <Link href="/sitemap.xml" className="hover:text-fg">Sitemap</Link>
         </div>
       </div>
     </footer>

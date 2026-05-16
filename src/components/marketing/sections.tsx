@@ -12,6 +12,7 @@ import { fadeUp, staggerContainer } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { Hero3D, type ScenePreset } from '@/components/marketing3d/Hero3D';
 import { AmbientBackdrop } from '@/components/marketing3d/AmbientBackdrop';
+import { PremiumCard } from './PremiumCard';
 
 // ── Hero ─────────────────────────────────────────────────────────────────
 // Thin wrapper around Hero3D so existing callsites keep working. The
@@ -111,7 +112,7 @@ export function Reveal({
       whileInView="visible"
       viewport={{ once: true, amount: 0.2 }}
       variants={sectionVariants}
-      className={cn('relative isolate px-4 md:px-8 py-16 md:py-24 overflow-hidden', className)}
+      className={cn('relative isolate px-4 md:px-8 py-12 md:py-24 overflow-hidden', className)}
     >
       {ambient && <AmbientBackdrop variant={variant} />}
       <div className="relative z-10 mx-auto max-w-[1280px]">{children}</div>
@@ -143,11 +144,11 @@ export function SectionHeading({
       {eyebrow && (
         <p className="text-xs uppercase tracking-[0.18em] font-semibold text-brand mb-3">{eyebrow}</p>
       )}
-      <h2 className="font-display text-4xl md:text-5xl lg:text-6xl font-bold tracking-[-0.025em] leading-[1.05] text-fg">
+      <h2 className="font-display text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold tracking-[-0.025em] leading-[1.08] md:leading-[1.05] text-fg">
         {title}
       </h2>
       {description && (
-        <p className="mt-4 text-lg text-fg-muted leading-relaxed">{description}</p>
+        <p className="mt-3 md:mt-4 text-base sm:text-lg text-fg-muted leading-relaxed">{description}</p>
       )}
     </div>
   );
@@ -163,7 +164,7 @@ export function FeatureGrid({
   className?: string;
 }) {
   return (
-    <div className={cn('mt-12 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6', className)}>
+    <div className={cn('mt-8 md:mt-12 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6', className)}>
       {items.map((it) => (
         <FeatureCard key={it.title} icon={it.icon} title={it.title} description={it.description} />
       ))}
@@ -172,51 +173,17 @@ export function FeatureGrid({
 }
 
 function FeatureCard({ icon, title, description }: { icon?: ReactNode; title: string; description: string }) {
-  const ref = useRef<HTMLDivElement>(null);
-
-  const onMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    const el = ref.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width - 0.5) * 2;
-    const y = ((e.clientY - rect.top)  / rect.height - 0.5) * 2;
-    el.style.setProperty('--rx', `${(-y * 4).toFixed(2)}deg`);
-    el.style.setProperty('--ry', `${(x * 4).toFixed(2)}deg`);
-    el.style.setProperty('--gx', `${((x + 1) * 50).toFixed(2)}%`);
-    el.style.setProperty('--gy', `${((y + 1) * 50).toFixed(2)}%`);
-  };
-  const onLeave = () => {
-    const el = ref.current;
-    if (!el) return;
-    el.style.setProperty('--rx', '0deg');
-    el.style.setProperty('--ry', '0deg');
-  };
-
   return (
-    <div
-      ref={ref}
-      onMouseMove={onMove}
-      onMouseLeave={onLeave}
-      className={cn(
-        'group relative overflow-hidden rounded-xl border border-border bg-surface p-6',
-        'transition-transform duration-200',
-        '[transform:perspective(1000px)_rotateX(var(--rx,0deg))_rotateY(var(--ry,0deg))]',
-      )}
-      style={{ transformStyle: 'preserve-3d' as const }}
-    >
-      {/* Cursor-tracked spotlight. */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-        style={{
-          background: 'radial-gradient(400px circle at var(--gx, 50%) var(--gy, 50%), color-mix(in srgb, var(--c-brand) 12%, transparent), transparent 60%)',
-        }}
-      />
-      <div className="relative">
-        {icon && <span className="inline-flex text-brand">{icon}</span>}
-        <h3 className="mt-3 text-lg font-semibold text-fg">{title}</h3>
+    <PremiumCard className="h-full">
+      <div className="p-5 md:p-6">
+        {icon && (
+          <span className="inline-flex items-center justify-center h-10 w-10 rounded-md bg-brand-tint text-brand">
+            {icon}
+          </span>
+        )}
+        <h3 className="mt-4 text-base md:text-lg font-semibold text-fg">{title}</h3>
         <p className="mt-1.5 text-sm text-fg-muted leading-relaxed">{description}</p>
       </div>
-    </div>
+    </PremiumCard>
   );
 }
