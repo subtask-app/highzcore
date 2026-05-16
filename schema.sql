@@ -145,13 +145,23 @@ CREATE TYPE dispute_resolution     AS ENUM ('pending', 'sided_with_creator', 'si
 -- Is the calling user an admin? Used in RLS policies — security definer so
 -- the function can read the users.is_admin flag even when the caller's own
 -- SELECT policy would block it.
+--
+-- LANGUAGE plpgsql (not sql) so Postgres defers name resolution to call
+-- time. With LANGUAGE sql the function body is validated at create time
+-- and `users` doesn't exist yet — this file creates the table in the
+-- next section.
 CREATE OR REPLACE FUNCTION is_admin()
 RETURNS BOOLEAN
-LANGUAGE sql
+LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT COALESCE((SELECT is_admin FROM users WHERE id = auth.uid()), FALSE);
+DECLARE
+  result BOOLEAN;
+BEGIN
+  SELECT COALESCE(u.is_admin, FALSE) INTO result FROM public.users u WHERE u.id = auth.uid();
+  RETURN COALESCE(result, FALSE);
+END;
 $$;
 
 -- Cheap shorthand for `auth.uid() = $1` used in many policies.
